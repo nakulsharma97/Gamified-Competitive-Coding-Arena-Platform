@@ -1,0 +1,15 @@
+{
+  "name": "codeslam",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm --workspace frontend run dev",
+    "build": "npm --workspace frontend run build",
+    "preview": "npm --workspace frontend run preview",
+    "storybook": "npm --workspace packages/ui run storybook",
+    "build-storybook": "npm --workspace packages/ui run build-storybook"
+  }
+}

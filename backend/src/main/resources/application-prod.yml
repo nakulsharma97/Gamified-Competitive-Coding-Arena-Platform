@@ -1,0 +1,69 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+server:
+  forward-headers-strategy: framework
+
+app:
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+    routes:
+      - name: login
+        path: /api/auth/login
+        methods: [POST]
+        capacity: ${RATE_LIMIT_LOGIN_CAPACITY:5}
+        refill-tokens: ${RATE_LIMIT_LOGIN_REFILL_TOKENS:5}
+        refill-period: ${RATE_LIMIT_LOGIN_REFILL_PERIOD:PT1M}
+      - name: register
+        path: /api/auth/register
+        methods: [POST]
+        capacity: ${RATE_LIMIT_REGISTER_CAPACITY:3}
+        refill-tokens: ${RATE_LIMIT_REGISTER_REFILL_TOKENS:3}
+        refill-period: ${RATE_LIMIT_REGISTER_REFILL_PERIOD:PT10M}
+      - name: matchmaking-join
+        path: /api/matchmaking/join
+        methods: [POST]
+        capacity: ${RATE_LIMIT_MATCHMAKING_JOIN_CAPACITY:8}
+        refill-tokens: ${RATE_LIMIT_MATCHMAKING_JOIN_REFILL_TOKENS:8}
+        refill-period: ${RATE_LIMIT_MATCHMAKING_JOIN_REFILL_PERIOD:PT1M}
+      - name: matchmaking-join-alias
+        path: /api/queue/join
+        methods: [POST]
+        capacity: ${RATE_LIMIT_MATCHMAKING_JOIN_CAPACITY:8}
+        refill-tokens: ${RATE_LIMIT_MATCHMAKING_JOIN_REFILL_TOKENS:8}
+        refill-period: ${RATE_LIMIT_MATCHMAKING_JOIN_REFILL_PERIOD:PT1M}
+      - name: submission
+        path: /api/submission/**
+        methods: [POST]
+        capacity: ${RATE_LIMIT_SUBMISSION_CAPACITY:20}
+        refill-tokens: ${RATE_LIMIT_SUBMISSION_REFILL_TOKENS:20}
+        refill-period: ${RATE_LIMIT_SUBMISSION_REFILL_PERIOD:PT1M}
+      - name: submission-alias
+        path: /api/submissions/**
+        methods: [POST]
+        capacity: ${RATE_LIMIT_SUBMISSION_CAPACITY:20}
+        refill-tokens: ${RATE_LIMIT_SUBMISSION_REFILL_TOKENS:20}
+        refill-period: ${RATE_LIMIT_SUBMISSION_REFILL_PERIOD:PT1M}
+      - name: webhook
+        path: /api/webhooks/**
+        methods: [POST]
+        capacity: ${RATE_LIMIT_WEBHOOK_CAPACITY:120}
+        refill-tokens: ${RATE_LIMIT_WEBHOOK_REFILL_TOKENS:120}
+        refill-period: ${RATE_LIMIT_WEBHOOK_REFILL_PERIOD:PT1M}
+    login:
+      block-after-failures: ${LOGIN_BLOCK_AFTER_FAILURES:5}
+      base-delay: ${LOGIN_BASE_DELAY:PT2S}
+      max-delay: ${LOGIN_MAX_DELAY:PT5M}
+      block-duration: ${LOGIN_BLOCK_DURATION:PT15M}
+    cleanup:
+      stale-after: ${RATE_LIMIT_STALE_AFTER:PT6H}
+      max-entries: ${RATE_LIMIT_MAX_ENTRIES:50000}
+auth:
+  jwt:
+    issuer: ${AUTH_JWT_ISSUER:codeslam-auth}
+    secret-base64: ${AUTH_JWT_SECRET_BASE64:codeslam-auth-development-secret-change-me-please-please}
+    expiration-minutes: ${AUTH_JWT_EXPIRATION_MINUTES:15}
+    refresh-expiration-days: ${AUTH_JWT_REFRESH_EXPIRATION_DAYS:30}
+    cleanup-interval-ms: ${AUTH_JWT_CLEANUP_INTERVAL_MS:3600000}

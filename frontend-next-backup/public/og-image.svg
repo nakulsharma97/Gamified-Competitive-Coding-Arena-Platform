@@ -1,0 +1,18 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" rx="36" fill="#050816"/>
+  <circle cx="1006" cy="146" r="204" fill="#8B5CF6" fill-opacity="0.18"/>
+  <circle cx="212" cy="496" r="188" fill="#22D3EE" fill-opacity="0.15"/>
+  <rect x="70" y="70" width="1060" height="490" rx="28" fill="#0F172A" fill-opacity="0.82" stroke="#FFFFFF" stroke-opacity="0.08"/>
+  <text x="110" y="188" fill="#F8FAFC" font-size="78" font-weight="700" font-family="Inter, Arial, sans-serif">CodeSlam</text>
+  <text x="110" y="252" fill="#C7D2FE" font-size="28" font-weight="500" font-family="Inter, Arial, sans-serif">Competitive coding arena</text>
+  <text x="110" y="338" fill="#E2E8F0" font-size="34" font-weight="600" font-family="Inter, Arial, sans-serif">Battle live. Watch the ticker. Climb the ladder.</text>
+  <rect x="110" y="390" width="260" height="72" rx="20" fill="#8B5CF6"/>
+  <text x="170" y="436" fill="#FFFFFF" font-size="24" font-weight="700" font-family="Inter, Arial, sans-serif">Join arena</text>
+  <rect x="390" y="390" width="280" height="72" rx="20" fill="#FFFFFF" fill-opacity="0.06" stroke="#FFFFFF" stroke-opacity="0.1"/>
+  <text x="446" y="436" fill="#E2E8F0" font-size="24" font-weight="700" font-family="Inter, Arial, sans-serif">View live battles</text>
+  <rect x="760" y="150" width="340" height="232" rx="24" fill="#050816" fill-opacity="0.78" stroke="#22D3EE" stroke-opacity="0.2"/>
+  <text x="794" y="198" fill="#67E8F9" font-size="18" font-weight="700" font-family="Inter, Arial, sans-serif">LIVE STATS</text>
+  <text x="794" y="250" fill="#FFFFFF" font-size="60" font-weight="700" font-family="Inter, Arial, sans-serif">1.2k</text>
+  <text x="794" y="286" fill="#94A3B8" font-size="22" font-weight="500" font-family="Inter, Arial, sans-serif">online players</text>
+  <text x="794" y="340" fill="#FFFFFF" font-size="32" font-weight="600" font-family="Inter, Arial, sans-serif">184 matches today</text>
+</svg>

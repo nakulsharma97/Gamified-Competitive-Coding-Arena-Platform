@@ -1,0 +1,10 @@
+node_modules
+/dist
+/.vite
+/.idea
+*.log
+.DS_Store
+frontend/node_modules
+frontend/dist
+backend/target
+backend/.mvn

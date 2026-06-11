@@ -1,0 +1,228 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #050816;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #050816;
+  color: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+  color: #ffffff;
+}
+
+.landing-section {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 760px;
+}
+
+.ticker-mask {
+  contain: layout paint;
+}
+
+.ticker-track {
+  animation: ticker-scroll 38s linear infinite;
+  will-change: transform;
+}
+
+.battle-chip {
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .ticker-track {
+    animation: none;
+  }
+}@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: #010409;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background-color: #010409;
+  color: #dce1fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(183, 109, 255, 0.35);
+  color: #f8fafc;
+}
+
+.font-sora {
+  font-family: 'Sora', sans-serif;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.grid-overlay {
+  background-image: radial-gradient(circle at 2px 2px, rgba(183, 109, 255, 0.05) 1px, transparent 0);
+  background-size: 32px 32px;
+}
+
+.vignette {
+  background: radial-gradient(circle, transparent 40%, rgba(1, 4, 9, 0.8) 100%);
+}
+
+.tech-panel {
+  clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  border: 1px solid rgba(221, 183, 255, 0.1);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(20px);
+}
+
+.bracket-x::before,
+.bracket-x::after {
+  content: '';
+  position: absolute;
+  width: 15px;
+  height: 100%;
+  border: 1px solid rgba(221, 183, 255, 0.3);
+}
+
+.bracket-x::before {
+  left: 0;
+  border-right: 0;
+}
+
+.bracket-x::after {
+  right: 0;
+  border-left: 0;
+}
+
+.motion-blur-ticker {
+  animation: ticker 25s linear infinite;
+  filter: blur(0.5px);
+}
+
+@keyframes ticker {
+  0% {
+    transform: translateX(100%);
+  }
+
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.pulse-glow {
+  animation: pulse-glow 3s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.4;
+    filter: blur(8px);
+  }
+
+  50% {
+    opacity: 0.8;
+    filter: blur(12px);
+  }
+}
+
+.scan-line {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(to bottom, transparent 50%, rgba(183, 109, 255, 0.03) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 4s infinite linear;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.avatar-dominant {
+  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  transform: perspective(1000px) rotateY(-5deg);
+}
+
+.avatar-recessed {
+  mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  transform: perspective(1000px) rotateY(15deg) scale(0.85);
+  filter: grayscale(0.4) brightness(0.6);
+}
+
+.rank-line {
+  background: linear-gradient(to bottom, transparent, rgba(183, 109, 255, 0.5), transparent);
+}
+
+.reveal-up {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-up.active {
+  opacity: 1;
+  transform: translateY(0);
+}
