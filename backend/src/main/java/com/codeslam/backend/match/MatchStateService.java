@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-@Service
+@Service("battleMatchStateService")
 public class MatchStateService {
 
     private static final int DEFAULT_TIMER_SECONDS = 600;
@@ -62,32 +62,47 @@ public class MatchStateService {
 
     public MatchDamageResult applyDamage(MatchState initialState, Submission submission, DamageResult damageResult,
             boolean selfDamage) {
-        UUID matchUuid = parseUuid(initialState, "matchId");
+       UUID matchUuid = UUID.randomUUID();
         MatchEntity match = matchRepository.findById(matchUuid.toString())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Match not found"));
 
         String p1Id = match.getPlayer1().getId().toString();
         String p2Id = match.getPlayer2().getId().toString();
-        boolean attackerIsP1 = Objects.equals(submission, p1Id);
-        boolean attackerIsP2 = Objects.equals(submission, p2Id);
-        if (!attackerIsP1 && !attackerIsP2) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User is not part of this match");
-        }
+        String attackerId = submission.getUser().getId().toString();
 
-        int newP1Hp = match.getPlayer1Hp() != null ? match.getPlayer1Hp() : 100;
-        int newP2Hp = match.getPlayer2Hp() != null ? match.getPlayer2Hp() : 100;
+boolean attackerIsP1 = attackerId.equals(p1Id);
+boolean attackerIsP2 = attackerId.equals(p2Id);
 
-        if (attackerIsP1) {
-            newP2Hp -= damageResult;
-            newP1Hp -= selfDamage;
-            match.setPlayer1TotalDamage(
-                    (match.getPlayer1TotalDamage() != null ? match.getPlayer1TotalDamage() : 0) + damageResult);
-        } else {
-            newP1Hp -= damageResult;
-            newP2Hp -= b;
-            match.setPlayer2TotalDamage(
-                    (match.getPlayer2TotalDamage() != null ? match.getPlayer2TotalDamage() : 0) + damageResult);
-        }
+int damage = damageResult.getDamageDealt() != null
+        ? damageResult.getDamageDealt()
+        : 0;
+
+int selfDmg = damageResult.getSelfDamage() != null
+        ? damageResult.getSelfDamage()
+        : 0;
+
+int newP2Hp = 0;
+int newP1Hp = 0;
+if (attackerIsP1) {
+
+    newP2Hp -= damage;
+    newP1Hp -= selfDmg;
+
+    match.setPlayer1TotalDamage(
+            (match.getPlayer1TotalDamage() != null
+                    ? match.getPlayer1TotalDamage()
+                    : 0) + damage);
+
+} else {
+
+    newP1Hp -= damage;
+    newP2Hp -= selfDmg;
+
+    match.setPlayer2TotalDamage(
+            (match.getPlayer2TotalDamage() != null
+                    ? match.getPlayer2TotalDamage()
+                    : 0) + damage);
+}
 
         newP1Hp = Math.max(0, newP1Hp);
         newP2Hp = Math.max(0, newP2Hp);
@@ -97,14 +112,14 @@ public class MatchStateService {
         matchRepository.save(match);
 
         boolean matchEnded = newP1Hp <= 0 || newP2Hp <= 0;
-        matchWebSocketPublisher.publishHpUpdated(initialState, Map.of(
-                "matchId", initialState,
-                "player1Hp", newP1Hp,
-                "player2Hp", newP2Hp,
-                "attackerId", submission,
-                "damage", damageResult,
-                "selfDamage", selfDamage,
-                "matchEnded", matchEnded));
+       matchWebSocketPublisher.publishHpUpdated(match.getId(), Map.of(
+        "matchId", match.getId(),
+        "player1Hp", newP1Hp,
+        "player2Hp", newP2Hp,
+        "attackerId", attackerId,
+        "damage", damage,
+        "selfDamage", selfDmg,
+        "matchEnded", matchEnded));
         return new MatchDamageResult(newP1Hp, newP2Hp, matchEnded);
     }
 
@@ -245,50 +260,48 @@ public class MatchStateService {
         }
     }
 
-    public static class MatchDamageResult {
-        public int player1Hp;
-        public int player2Hp;
-        public boolean matchEnded;
+   public static class MatchDamageResult {
+    public int player1Hp;
+    public int player2Hp;
+    public boolean matchEnded;
 
-        public MatchDamageResult(int player1Hp, int player2Hp, boolean matchEnded) {
-            this.player1Hp = player1Hp;
-            this.player2Hp = player2Hp;
-            this.matchEnded = matchEnded;
-        }
-
-        public Integer player2Hp() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'player2Hp'");
-        }
-
-        public Object winnerId() {
-            // TODO Auto-generated method stub
-            throw new UnsupportedOperationException("Unimplemented method 'winnerId'");
-        }
+    public MatchDamageResult(int player1Hp, int player2Hp, boolean matchEnded) {
+        this.player1Hp = player1Hp;
+        this.player2Hp = player2Hp;
+        this.matchEnded = matchEnded;
     }
+}
 
-      public int secondsRemaining;
+public static class TimerTickEvent {
+    public int secondsRemaining;
 
-        public TimerTickEvent(int secondsRemaining) {
-            this.secondsRemaining = secondsRemaining;
-        }
+    public TimerTickEvent(int secondsRemaining) {
+        this.secondsRemaining = secondsRemaining;
     }
+}
 
-    public static class MatchEndEvent {
-        public UUID winnerId;
-        public int player1EloChange;
-        public int player2EloChange;
-        public int finalP1Hp;
-        public int finalP2Hp;
+public static class MatchEndEvent {
+    public UUID winnerId;
+    public int player1EloChange;
+    public int player2EloChange;
+    public int finalP1Hp;
+    public int finalP2Hp;
 
-        public MatchEndEvent(UUID winnerId, int player1EloChange, int player2EloChange, int finalP1Hp, int finalP2Hp) {
-            this.winnerId = winnerId;
-            this.player1EloChange = player1EloChange;
-            this.player2EloChange = player2EloChange;
-            this.finalP1Hp = finalP1Hp;
-            this.finalP2Hp = finalP2Hp;
-        }
+    public MatchEndEvent(
+            UUID winnerId,
+            int player1EloChange,
+            int player2EloChange,
+            int finalP1Hp,
+            int finalP2Hp) {
+
+        this.winnerId = winnerId;
+        this.player1EloChange = player1EloChange;
+        this.player2EloChange = player2EloChange;
+        this.finalP1Hp = finalP1Hp;
+        this.finalP2Hp = finalP2Hp;
     }
+}
 
-    public class MatchState {
-    }
+public static class MatchState {
+}
+}

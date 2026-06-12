@@ -1,5 +1,5 @@
 package com.codeslam.backend.matchmaking;
-
+import com.codeslam.backend.match.MatchStateService;
 import com.codeslam.backend.dto.ProblemDto;
 import com.codeslam.backend.dto.UserProfileDto;
 import com.codeslam.backend.entity.MatchEntity;
@@ -10,7 +10,6 @@ import com.codeslam.backend.enums.MatchStatus;
 import com.codeslam.backend.exception.ResourceNotFoundException;
 import com.codeslam.backend.mapper.ProblemMapper;
 import com.codeslam.backend.mapper.UserMapper;
-import com.codeslam.backend.match.MatchStateService;
 import com.codeslam.backend.repository.MatchRepository;
 import com.codeslam.backend.repository.ProblemRepository;
 import com.codeslam.backend.repository.UserRepository;

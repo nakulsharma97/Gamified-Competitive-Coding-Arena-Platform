@@ -14,5 +14,13 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor(access = AccessLevel.PUBLIC)
 @EqualsAndHashCode(callSuper = true)
-public class MatchEntity extends Match {
+public class MatchEntity extends Match {public Object getFirstAcBy() {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'getFirstAcBy'");
+    }
+
+public void setFirstAcBy(String userId) {
+    // TODO Auto-generated method stub
+    throw new UnsupportedOperationException("Unimplemented method 'setFirstAcBy'");
+}
 }

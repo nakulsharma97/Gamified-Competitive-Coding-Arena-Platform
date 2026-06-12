@@ -39,7 +39,7 @@ export function LandingNavbar() {
 
         <div className="flex items-center gap-3">
           <Link
-            href="/sign-in"
+            href="/login"
             className="hidden rounded-full border border-[#E5E7EB] bg-white px-5 py-2 text-sm font-semibold text-[#111827] transition hover:border-[#C7D2FE] hover:bg-[#F8FAFF] md:inline-flex"
           >
             Login

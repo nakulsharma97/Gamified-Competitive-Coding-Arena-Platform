@@ -13,7 +13,7 @@ spring:
   jpa:
     database-platform: org.hibernate.dialect.MySQL8Dialect
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     open-in-view: false
 clerk:
   jwks-url: ${CLERK_JWKS_URL:https://your-clerk-domain/.well-known/jwks.json}
@@ -21,7 +21,7 @@ clerk:
 auth:
   jwt:
     issuer: ${AUTH_JWT_ISSUER:codeslam-auth}
-    secret-base64: ${AUTH_JWT_SECRET_BASE64:codeslam-auth-development-secret-change-me-please-please}
+    secret-base64: Y29kZXNsYW0tc2VjcmV0LWtleS1mb3ItZGV2ZWxvcG1lbnQtMTIzNDU2Nzg5
     expiration-minutes: ${AUTH_JWT_EXPIRATION_MINUTES:15}
     refresh-expiration-days: ${AUTH_JWT_REFRESH_EXPIRATION_DAYS:30}
     cleanup-interval-ms: ${AUTH_JWT_CLEANUP_INTERVAL_MS:3600000}

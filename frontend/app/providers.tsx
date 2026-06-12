@@ -6,11 +6,20 @@ import { PostHogProvider } from "posthog-js/react";
 import { Toaster } from "@/components/ui/toaster";
 import { toast } from "@/hooks/use-toast";
 import { connect, subscribe } from "@/lib/stomp";
+import { ClerkProvider } from "@clerk/nextjs";
 
 export function AppProviders({ children }: Readonly<{ children: React.ReactNode }>) {
-  const getToken = async () => localStorage.getItem("token");
-  const isLoaded = true;
-  const userId = localStorage.getItem("userId");
+  const getToken = async () => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token");
+};
+
+const isLoaded = true;
+
+const userId =
+  typeof window !== "undefined"
+    ? localStorage.getItem("userId")
+    : null;
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
@@ -85,9 +94,11 @@ export function AppProviders({ children }: Readonly<{ children: React.ReactNode 
   }, [getToken, isLoaded, userId]);
 
   return (
+  <ClerkProvider>
     <PostHogProvider client={posthog}>
       {children}
       <Toaster />
     </PostHogProvider>
-  );
+  </ClerkProvider>
+);
 }

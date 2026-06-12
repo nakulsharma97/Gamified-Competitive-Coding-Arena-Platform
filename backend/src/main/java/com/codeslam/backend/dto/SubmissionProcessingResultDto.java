@@ -1,5 +1,6 @@
 package com.codeslam.backend.dto;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -17,14 +18,32 @@ public record SubmissionProcessingResultDto(
         Map<String, Integer> damageBreakdown,
         List<SubmissionDto> submissions) {
 
-    public SubmissionProcessingResultDto(String id, UUID matchId2, String name, Integer runtimeMs2, Double memoryMb2,
-            Integer passedCases2, Integer totalCases2, int updatedPlayer1Hp, int updatedPlayer2Hp, UUID winnerId2,
-            Map<String> of, List<SubmissionDto> of2) {
-        //TODO Auto-generated constructor stub
-    }
+    public SubmissionProcessingResultDto(
+            String id,
+            UUID matchId,
+            String verdict,
+            Integer runtimeMs,
+            Double memoryMb,
+            Integer passedCases,
+            Integer totalCases,
+            int player1Hp,
+            int player2Hp,
+            UUID winnerId,
+            Map<String, Integer> damageBreakdown,
+            List<SubmissionDto> submissions) {
 
-    public SubmissionProcessingResultDto(String id, UUID matchId2, String name, Integer runtimeMs2, Double memoryMb2,
-            Integer passedCases2, Integer totalCases2, int updatedPlayer1Hp, int updatedPlayer2Hp, UUID winnerId2) {
-        //TODO Auto-generated constructor stub
+        this(
+                UUID.fromString(id),
+                matchId,
+                verdict,
+                runtimeMs,
+                memoryMb,
+                passedCases,
+                totalCases,
+                player1Hp,
+                player2Hp,
+                winnerId,
+                damageBreakdown,
+                submissions);
     }
 }

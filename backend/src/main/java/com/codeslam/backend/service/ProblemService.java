@@ -30,19 +30,30 @@ public class ProblemService {
         this.testCaseRepository = testCaseRepository;
     }
 
-    @Transactional(readOnly = true)
-    public PagedResponse<ProblemDto> getProblems(Difficulty difficulty, String topic, String search,
-            Pageable pageable) {
-        Pageable effectivePageable = pageable.getSort().isUnsorted()
-                ? PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                        Sort.by(Sort.Direction.DESC, "battleUseCount"))
-                : pageable;
+   @Transactional(readOnly = true)
+public PagedResponse<ProblemDto> getProblems(Difficulty difficulty, String topic, String search,
+        Pageable pageable) {
 
-        Page<Problem> page = problemRepository.searchProblems(difficulty == null ? null : difficulty.name(), topic,
-                search, effectivePageable);
-        List<ProblemDto> data = page.getContent().stream().map(this::toDto).toList();
-        return new PagedResponse<>(data, page.getNumber(), page.getSize(), page.getTotalElements(), page.hasNext());
-    }
+    Pageable effectivePageable = PageRequest.of(
+            pageable.getPageNumber(),
+            pageable.getPageSize()
+    );
+
+    Page<Problem> page = problemRepository.searchProblems(
+            difficulty == null ? null : difficulty.name(),
+            topic,
+            search,
+            effectivePageable);
+
+    List<ProblemDto> data = page.getContent().stream().map(this::toDto).toList();
+
+    return new PagedResponse<>(
+            data,
+            page.getNumber(),
+            page.getSize(),
+            page.getTotalElements(),
+            page.hasNext());
+}
 
     @Transactional(readOnly = true)
     public ProblemDto getProblem(UUID id) {

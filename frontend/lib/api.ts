@@ -19,14 +19,8 @@ type ApiJsonOptions = ApiOptions & object;
 
 async function getBearerToken() {
   if (typeof window === "undefined") {
-    try {
-      const { auth } = await import("@clerk/nextjs/server");
-      const clerkAuth = await auth();
-      return clerkAuth.getToken();
-    } catch {
-      return null;
-    }
-  }
+  return null;
+}
 
   const clerk = (
     window as typeof window & {
@@ -99,15 +93,5 @@ export async function apiJson<T>(path: string, options: ApiJsonOptions = {}) {
 }
 
 export async function getServerToken() {
-  if (typeof window !== "undefined") {
-    return null;
-  }
-
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const session = await auth();
-    return session.getToken();
-  } catch {
-    return null;
-  }
+  return null;
 }

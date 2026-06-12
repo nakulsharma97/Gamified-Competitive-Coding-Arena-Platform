@@ -26,18 +26,29 @@ public class ProblemController {
     }
 
     @GetMapping
-    public ResponseEntity<PagedResponse<ProblemDto>> getProblems(Pageable pageable,
-            @RequestParam(required = false) Difficulty difficulty,
-            @RequestParam(required = false) String topic,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) Integer limit) {
-        Pageable effectivePageable = limit == null
-                ? pageable
-                : PageRequest.of(pageable.getPageNumber(), Math.max(1, limit),
-                        pageable.getSort().isUnsorted() ? Sort.unsorted() : pageable.getSort());
-        return ResponseEntity.ok(problemService.getProblems(difficulty, topic, search, effectivePageable));
-    }
+public ResponseEntity<PagedResponse<ProblemDto>> getProblems(
+        Pageable pageable,
+        @RequestParam(name = "difficulty", required = false) Difficulty difficulty,
+        @RequestParam(name = "topic", required = false) String topic,
+        @RequestParam(name = "search", required = false) String search,
+        @RequestParam(name = "limit", required = false) Integer limit) {
 
+    Pageable effectivePageable = limit == null
+            ? pageable
+            : PageRequest.of(
+                    pageable.getPageNumber(),
+                    Math.max(1, limit),
+                    pageable.getSort().isUnsorted()
+                            ? Sort.unsorted()
+                            : pageable.getSort());
+
+    return ResponseEntity.ok(
+            problemService.getProblems(
+                    difficulty,
+                    topic,
+                    search,
+                    effectivePageable));
+}
     @GetMapping("/{id}")
     public ResponseEntity<ProblemDto> getProblem(@PathVariable UUID id) {
         return ResponseEntity.ok(problemService.getProblem(id));

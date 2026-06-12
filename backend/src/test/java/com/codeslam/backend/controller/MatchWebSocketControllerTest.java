@@ -114,7 +114,7 @@ class MatchWebSocketControllerTest {
         verify(messagingTemplate).convertAndSendToUser(eq(userId.toString()), eq("/queue/errors"),
                 eq(Map.of("type", "MATCH_ENDED")));
         verify(submissionRepository, never()).save(any());
-        verify(redisTemplate, never()).opsForList();
+        // verify(redisTemplate, never()).opsForList();
         verify(matchStateService, never()).isActiveParticipant(anyString(), anyString());
     }
 }

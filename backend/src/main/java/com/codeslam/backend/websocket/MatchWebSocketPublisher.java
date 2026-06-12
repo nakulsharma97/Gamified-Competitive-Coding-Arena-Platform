@@ -7,6 +7,8 @@ import java.util.UUID;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
+import com.codeslam.backend.match.MatchStateService.MatchState;
+
 @Service
 public class MatchWebSocketPublisher {
 
@@ -44,9 +46,9 @@ public class MatchWebSocketPublisher {
         publishRoomEvent(matchId, MatchRoomEventType.CODE_SUBMITTED, payload);
     }
 
-    public void publishHpUpdated(String matchId, Map<String, Object> payload) {
-        publishRoomEvent(matchId, MatchRoomEventType.HP_UPDATED, payload);
-    }
+   public void publishHpUpdated(UUID initialState, Map<String, Object> payload) {
+    publishRoomEvent(initialState.toString(), MatchRoomEventType.HP_UPDATED, payload);
+}
 
     public void publishPowerUpUsed(String matchId, Map<String, Object> payload) {
         publishRoomEvent(matchId, MatchRoomEventType.POWER_UP_USED, payload);

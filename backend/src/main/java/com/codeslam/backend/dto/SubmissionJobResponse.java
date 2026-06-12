@@ -5,6 +5,6 @@ import java.util.UUID;
 public record SubmissionJobResponse(UUID jobId) {
 
     public SubmissionJobResponse(String id) {
-        //TODO Auto-generated constructor stub
+        this(UUID.fromString(id));
     }
 }
