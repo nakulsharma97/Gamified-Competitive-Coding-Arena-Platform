@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { ClerkProvider } from "@clerk/nextjs";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { Toaster } from "@/components/ui/toaster";
@@ -93,7 +94,10 @@ const userId =
     };
   }, [getToken, isLoaded, userId]);
 
+  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
   return (
+<<<<<<< HEAD
   <ClerkProvider>
     <PostHogProvider client={posthog}>
       {children}
@@ -101,4 +105,13 @@ const userId =
     </PostHogProvider>
   </ClerkProvider>
 );
+=======
+    <ClerkProvider publishableKey={clerkPublishableKey}>
+      <PostHogProvider client={posthog}>
+        {children}
+        <Toaster />
+      </PostHogProvider>
+    </ClerkProvider>
+  );
+>>>>>>> 69d97fb (Dess)
 }

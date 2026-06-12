@@ -142,7 +142,7 @@ function buildTimeline(events: MatchEventDto[]) {
 export default async function MatchResultPage({ params }: PageProps) {
   const { matchId } = await params;
   const session = await auth();
-  const token = (await session.getToken()) ?? (await getServerToken());
+  const token = (await session.getToken(process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ? { template: process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE } : undefined)) ?? (await getServerToken());
 
   const [me, match, events, eloHistory] = await Promise.all([
     apiJson<UserProfile>("/api/users/me", { token: token ?? undefined }),

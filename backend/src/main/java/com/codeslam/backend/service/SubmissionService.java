@@ -89,7 +89,7 @@ public class SubmissionService {
 
         // Add to database queue instead of Redis
         long queuePosition = submissionQueueRepository.count() + 1;
-        SubmissionQueue queuedSubmission = SubmissionQueue.create(saved.getId(), queuePosition);
+        SubmissionQueue queuedSubmission = SubmissionQueue.create(saved.getId().toString(), queuePosition);
         submissionQueueRepository.save(queuedSubmission);
 
         return new SubmissionJobResponse(saved.getId());

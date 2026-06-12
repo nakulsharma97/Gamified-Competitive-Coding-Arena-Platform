@@ -1,5 +1,6 @@
 package com.codeslam.backend.config;
 
+import com.codeslam.backend.auth.security.ClerkJwtAuthenticationFilter;
 import com.codeslam.backend.auth.security.JwtAuthenticationFilter;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -46,6 +47,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter,
+            ClerkJwtAuthenticationFilter clerkJwtAuthenticationFilter,
             @Qualifier("corsConfigurationSource") CorsConfigurationSource corsConfigurationSource) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -57,7 +59,9 @@ public class SecurityConfig {
                                 "/api/auth/password/reset")
                         .permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/problems/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/leaderboard", "/api/stats").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/users/me/elo-history",
+                                "/api/matches/history")
+                        .authenticated()
                         .requestMatchers(this::isPublicUserProfileRequest).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
@@ -68,6 +72,7 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
+                .addFilterBefore(clerkJwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

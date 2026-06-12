@@ -20,7 +20,7 @@ export default clerkMiddleware(async (auth, request) => {
     return;
   }
 
-  const token = await session.getToken();
+  const token = await session.getToken(process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ? { template: process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE } : undefined);
 
   if (!token) {
     return;

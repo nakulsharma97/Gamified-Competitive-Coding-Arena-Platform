@@ -55,6 +55,10 @@
       <artifactId>spring-boot-starter-data-jpa</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.mysql</groupId>
       <artifactId>mysql-connector-j</artifactId>
       <scope>runtime</scope>
@@ -91,7 +95,7 @@
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
       <version>${lombok.version}</version>
-      <optional>true</optional>
+      
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
@@ -139,7 +143,14 @@
         <version>3.13.0</version>
         <configuration>
           <release>21</release>
+<<<<<<< HEAD
           <parameters>true</parameters>
+=======
+          <fork>true</fork>
+          <compilerArgs>
+            <arg>-parameters</arg>
+          </compilerArgs>
+>>>>>>> 69d97fb (Dess)
           <annotationProcessorPaths>
             <path>
               <groupId>org.projectlombok</groupId>

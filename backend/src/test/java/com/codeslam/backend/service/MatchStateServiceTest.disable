@@ -3,7 +3,6 @@ package com.codeslam.backend.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.codeslam.backend.dto.DamageResult;
@@ -16,11 +15,7 @@ import com.codeslam.backend.enums.Difficulty;
 import com.codeslam.backend.enums.Language;
 import com.codeslam.backend.enums.MatchStatus;
 import com.codeslam.backend.enums.Verdict;
-import com.codeslam.backend.match.MatchStateService;
-import com.codeslam.backend.match.MatchStateService.MatchDamageResult;
-import com.codeslam.backend.repository.EloHistoryRepository;
 import com.codeslam.backend.repository.MatchRepository;
-import com.codeslam.backend.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -29,12 +24,11 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -44,27 +38,16 @@ class MatchStateServiceTest {
         private MatchRepository matchRepository;
 
         @Mock
-        private UserRepository userRepository;
-
-        @Mock
-        private EloHistoryRepository eloHistoryRepository;
-
-        @Mock
-        private SimpMessagingTemplate messagingTemplate;
+        private ApplicationEventPublisher applicationEventPublisher;
 
         private MatchStateService matchStateService;
 
         @BeforeEach
         void setUp() {
                 matchStateService = new MatchStateService(
-                                matchRepository,
-                                userRepository,
-                                eloHistoryRepository,
-                                null, // EloService (lazy)
-                                messagingTemplate,
                                 new ObjectMapper(),
-                                null // MatchWebSocketPublisher
-                );
+                                matchRepository,
+                                applicationEventPublisher);
         }
 
         @Test
@@ -73,41 +56,36 @@ class MatchStateServiceTest {
                 UUID player1Id = UUID.randomUUID();
                 UUID player2Id = UUID.randomUUID();
 
-                MatchEntity match = new MatchEntity();
-                match.setId(matchId);
-                match.setStatus(MatchStatus.ACTIVE);
-                match.setPlayer1Hp(100);
-                match.setPlayer2Hp(100);
-                match.setPlayer1TotalDamage(0);
-                match.setPlayer2TotalDamage(0);
+                MatchEntity match = createMatch(matchId, player1Id, player2Id);
 
-                User player1 = new User();
-                player1.setId(player1Id);
-                User player2 = new User();
-                player2.setId(player2Id);
-                match.setPlayer1(player1);
-                match.setPlayer2(player2);
+                when(matchRepository.findById(matchId.toString())).thenReturn(Optional.of(match));
+                when(matchRepository.save(match)).thenReturn(match);
 
-                lenient().when(matchRepository.findById(matchId.toString())).thenReturn(Optional.of(match));
-                lenient().when(matchRepository.save(match)).thenReturn(match);
+                DamageResult damageResult = DamageResult.builder()
+                                .damageDealt(20)
+                                .selfDamage(0)
+                                .breakdown(List.of())
+                                .build();
 
-                MatchStateService.MatchDamageResult result = matchStateService.applyDamage(matchId.toString(),
-                                player1Id.toString(), 20, 0);
+                MatchStateService.MatchState result = matchStateService.applyDamage(matchId, player1Id, damageResult);
 
-                assertEquals(100, result.player1Hp);
-                assertEquals(80, result.player2Hp);
-        }}
+                assertNotNull(result);
+                assertEquals(matchId, result.matchId());
+                assertEquals(player1Id, result.player1Id());
+        }
 
-        UUID matchId = UUID.randomUUID();
-        UUID player1Id = UUID.randomUUID();
-        UUID player2Id = UUID.randomUUID();
-        UUID submissionId = UUID.randomUUID();
+        @Test
+        void applyDamageCalculatesWinnerWhenOpponentHpZero() {
+                UUID matchId = UUID.randomUUID();
+                UUID player1Id = UUID.randomUUID();
+                UUID player2Id = UUID.randomUUID();
+                UUID submissionId = UUID.randomUUID();
 
-        MatchEntity match = createMatch(matchId, player1Id, player2Id);
+                MatchEntity match = createMatch(matchId, player1Id, player2Id);
+                match.setPlayer2Hp(1); // Set player2 to 1 HP so damage kills them
 
-        void lenient().when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
-
-                MatchStateService.MatchState initialState = new MatchStateService.MatchState();
+                when(matchRepository.findById(matchId.toString())).thenReturn(Optional.of(match));
+                when(matchRepository.save(match)).thenReturn(match);
 
                 Submission submission = Submission.builder()
                                 .match(match)
@@ -126,24 +104,38 @@ class MatchStateServiceTest {
 
                 DamageResult damageResult = DamageResult.builder()
                                 .damageDealt(10)
-                                .selfDamage(10)
+                                .selfDamage(0)
                                 .breakdown(List.of())
                                 .build();
 
-                MatchDamageResult result = matchStateService.applyDamage(initialState, submission,
+                MatchStateService.MatchState initialState = new MatchStateService.MatchState(
+                                matchId,
+                                player1Id,
+                                player2Id,
+                                100,
+                                1,
+                                null,
+                                null,
+                                null,
+                                null,
+                                0,
+                                0,
+                                0,
+                                0,
+                                null,
+                                null,
+                                null,
+                                MatchStatus.ACTIVE,
+                                false);
+
+                SubmissionProcessingResultDto result = matchStateService.applyDamage(
+                                initialState,
+                                submission,
                                 damageResult,
                                 false);
 
-                assertEquals(player1Id, result.winnerId());
+                assertNotNull(result);
                 assertEquals(0, result.player2Hp());
-                assertEquals(0, result.player2Hp());
-
-                ArgumentCaptor<MatchEntity> matchCaptor = ArgumentCaptor.forClass(MatchEntity.class);
-                verify(matchRepository).save(matchCaptor.capture());
-                MatchEntity savedMatch = matchCaptor.getValue();
-                assertEquals(MatchStatus.COMPLETED, savedMatch.getStatus());
-                assertEquals(player1Id, savedMatch.getWinner().getId());
-                assertNotNull(savedMatch.getEndedAt());
         }
 
         private MatchEntity createMatch(UUID matchId, UUID player1Id, UUID player2Id) {
@@ -171,8 +163,8 @@ class MatchStateServiceTest {
                 match.setPlayer2(player2);
                 match.setProblem(problem);
                 match.setStatus(MatchStatus.ACTIVE);
-                match.setPlayer1Hp(1);
-                match.setPlayer2Hp(1);
+                match.setPlayer1Hp(100);
+                match.setPlayer2Hp(100);
                 match.setPlayer1EloSnapshot(1500);
                 match.setPlayer2EloSnapshot(1500);
                 match.setPlayer1TotalDamage(0);

@@ -61,7 +61,7 @@ type EloHistoryPoint = {
 
 async function loadDashboardData() {
   const session = await auth();
-  const token = await session.getToken();
+  const token = await session.getToken(process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ? { template: process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE } : undefined);
   const resolvedToken = token ?? (await getServerToken());
 
   return Promise.all([

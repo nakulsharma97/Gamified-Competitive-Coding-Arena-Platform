@@ -18,21 +18,31 @@ type ApiOptions = RequestInit & {
 type ApiJsonOptions = ApiOptions & object;
 
 async function getBearerToken() {
+  const clerkJwtTemplate = typeof window === "undefined"
+    ? process.env.CLERK_JWT_TEMPLATE
+    : process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
+
   if (typeof window === "undefined") {
+<<<<<<< HEAD
   return null;
 }
-
-  const clerk = (
-    window as typeof window & {
-      Clerk?: {
-        session?: {
-          getToken: () => Promise<string | null>;
-        };
-      };
+=======
+    try {
+      const { auth } = await import("@clerk/nextjs/server");
+      const clerkAuth = await auth();
+      return await clerkAuth.getToken(clerkJwtTemplate ? { template: clerkJwtTemplate } : undefined);
+    } catch {
+      return null;
     }
-  ).Clerk;
+  }
+>>>>>>> 69d97fb (Dess)
 
-  return clerk?.session?.getToken?.() ?? null;
+  const clerk = (window as any).Clerk;
+  try {
+    return await clerk?.session?.getToken?.(clerkJwtTemplate ? { template: clerkJwtTemplate } : undefined) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function apiFetch(path: string, options: ApiOptions = {}) {
@@ -93,5 +103,20 @@ export async function apiJson<T>(path: string, options: ApiJsonOptions = {}) {
 }
 
 export async function getServerToken() {
+<<<<<<< HEAD
   return null;
+=======
+  if (typeof window !== "undefined") {
+    return null;
+  }
+
+  try {
+    const { auth } = await import("@clerk/nextjs/server");
+    const session = await auth();
+    const clerkJwtTemplate = process.env.CLERK_JWT_TEMPLATE;
+    return await session.getToken(clerkJwtTemplate ? { template: clerkJwtTemplate } : undefined);
+  } catch {
+    return null;
+  }
+>>>>>>> 69d97fb (Dess)
 }

@@ -230,6 +230,7 @@ public class MatchStateService {
                     new MatchCompletedEvent(match.getId(), state.player1Id(), state.player2Id()));
         }
 
+<<<<<<< HEAD
        return new SubmissionProcessingResultDto(
         UUID.fromString(submission.getId()),
         state.matchId(),
@@ -245,6 +246,22 @@ public class MatchStateService {
         List.of()
 );
 }
+=======
+        return new SubmissionProcessingResultDto(
+                submission.getId(),
+                state.matchId(),
+                submission.getVerdict().name(),
+                submission.getRuntimeMs(),
+                submission.getMemoryMb(),
+                submission.getPassedCases(),
+                submission.getTotalCases(),
+                updatedPlayer1Hp,
+                updatedPlayer2Hp,
+                winnerId,
+                Map.of(),
+                List.of());
+    }
+>>>>>>> 69d97fb (Dess)
 
     public MatchState applyPowerUp(MatchState state, UUID userId) {
         boolean isPlayer1 = state.player1Id().equals(userId);

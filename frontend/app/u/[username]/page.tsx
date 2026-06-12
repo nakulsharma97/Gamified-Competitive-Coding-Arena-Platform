@@ -79,7 +79,7 @@ function initials(name: string) {
 export default async function UserProfilePage({ params }: PageProps) {
   const { username } = await params;
   const session = await auth();
-  const token = (await session.getToken()) ?? (await getServerToken());
+  const token = (await session.getToken(process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ? { template: process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE } : undefined)) ?? (await getServerToken());
 
   let publicProfile: PublicProfileResponse;
   try {

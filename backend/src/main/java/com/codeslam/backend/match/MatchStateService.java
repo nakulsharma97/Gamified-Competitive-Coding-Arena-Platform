@@ -62,17 +62,30 @@ public class MatchStateService {
 
     public MatchDamageResult applyDamage(MatchState initialState, Submission submission, DamageResult damageResult,
             boolean selfDamage) {
+<<<<<<< HEAD
        UUID matchUuid = UUID.randomUUID();
+=======
+        UUID matchUuid = parseUuid(initialState.matchId(), "matchId");
+>>>>>>> 69d97fb (Dess)
         MatchEntity match = matchRepository.findById(matchUuid.toString())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Match not found"));
 
         String p1Id = match.getPlayer1().getId().toString();
         String p2Id = match.getPlayer2().getId().toString();
+<<<<<<< HEAD
         String attackerId = submission.getUser().getId().toString();
+=======
+        boolean attackerIsP1 = Objects.equals(submission.getUser().getId().toString(), p1Id);
+        boolean attackerIsP2 = Objects.equals(submission.getUser().getId().toString(), p2Id);
+        if (!attackerIsP1 && !attackerIsP2) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User is not part of this match");
+        }
+>>>>>>> 69d97fb (Dess)
 
 boolean attackerIsP1 = attackerId.equals(p1Id);
 boolean attackerIsP2 = attackerId.equals(p2Id);
 
+<<<<<<< HEAD
 int damage = damageResult.getDamageDealt() != null
         ? damageResult.getDamageDealt()
         : 0;
@@ -103,6 +116,21 @@ if (attackerIsP1) {
                     ? match.getPlayer2TotalDamage()
                     : 0) + damage);
 }
+=======
+        if (attackerIsP1) {
+            newP2Hp -= damageResult.getDamageDealt();
+            newP1Hp -= damageResult.getSelfDamage();
+            match.setPlayer1TotalDamage(
+                    (match.getPlayer1TotalDamage() != null ? match.getPlayer1TotalDamage() : 0)
+                            + damageResult.getDamageDealt());
+        } else {
+            newP1Hp -= damageResult.getDamageDealt();
+            newP2Hp -= damageResult.getSelfDamage();
+            match.setPlayer2TotalDamage(
+                    (match.getPlayer2TotalDamage() != null ? match.getPlayer2TotalDamage() : 0)
+                            + damageResult.getDamageDealt());
+        }
+>>>>>>> 69d97fb (Dess)
 
         newP1Hp = Math.max(0, newP1Hp);
         newP2Hp = Math.max(0, newP2Hp);
@@ -112,6 +140,7 @@ if (attackerIsP1) {
         matchRepository.save(match);
 
         boolean matchEnded = newP1Hp <= 0 || newP2Hp <= 0;
+<<<<<<< HEAD
        matchWebSocketPublisher.publishHpUpdated(match.getId(), Map.of(
         "matchId", match.getId(),
         "player1Hp", newP1Hp,
@@ -120,22 +149,27 @@ if (attackerIsP1) {
         "damage", damage,
         "selfDamage", selfDmg,
         "matchEnded", matchEnded));
+=======
+        matchWebSocketPublisher.publishHpUpdated(initialState.matchId(), Map.of(
+                "matchId", initialState.matchId(),
+                "player1Hp", newP1Hp,
+                "player2Hp", newP2Hp,
+                "attackerId", submission.getUser().getId().toString(),
+                "damage", damageResult.getDamageDealt(),
+                "selfDamage", damageResult.getSelfDamage(),
+                "matchEnded", matchEnded));
+>>>>>>> 69d97fb (Dess)
         return new MatchDamageResult(newP1Hp, newP2Hp, matchEnded);
     }
 
     public boolean isFirstAc(String matchId) {
         UUID matchUuid = parseUuid(matchId, "matchId");
         MatchEntity match = matchRepository.findById(matchUuid.toString()).orElse(null);
-        return match == null || match.getFirstAcBy() == null;
+        return match == null;
     }
 
     public void setFirstAcBy(String matchId, String userId) {
-        UUID matchUuid = parseUuid(matchId, "matchId");
-        MatchEntity match = matchRepository.findById(matchUuid.toString()).orElse(null);
-        if (match != null) {
-            match.setFirstAcBy(userId);
-            matchRepository.save(match);
-        }
+        // first-ac tracking is not stored in the current match entity schema
     }
 
     public void updateLastAcStats(String matchId, String userId, int runtimeMs, double memoryMb) {
@@ -265,15 +299,28 @@ if (attackerIsP1) {
     public int player2Hp;
     public boolean matchEnded;
 
+<<<<<<< HEAD
     public MatchDamageResult(int player1Hp, int player2Hp, boolean matchEnded) {
         this.player1Hp = player1Hp;
         this.player2Hp = player2Hp;
         this.matchEnded = matchEnded;
+=======
+        public MatchDamageResult(int player1Hp, int player2Hp, boolean matchEnded) {
+            this.player1Hp = player1Hp;
+            this.player2Hp = player2Hp;
+            this.matchEnded = matchEnded;
+        }
+>>>>>>> 69d97fb (Dess)
     }
 }
 
+<<<<<<< HEAD
 public static class TimerTickEvent {
     public int secondsRemaining;
+=======
+    public static class TimerTickEvent {
+        public int secondsRemaining;
+>>>>>>> 69d97fb (Dess)
 
     public TimerTickEvent(int secondsRemaining) {
         this.secondsRemaining = secondsRemaining;
@@ -302,6 +349,12 @@ public static class MatchEndEvent {
     }
 }
 
+<<<<<<< HEAD
 public static class MatchState {
 }
 }
+=======
+    public static record MatchState(String matchId, String player1Id, String player2Id) {
+    }
+}
+>>>>>>> 69d97fb (Dess)

@@ -41,7 +41,7 @@ export default async function LeaderboardPage({ searchParams }: PageProps) {
   const tier = typeof params.tier === "string" && params.tier.trim() ? params.tier.toUpperCase() : "ALL";
 
   const session = await auth();
-  const token = (await session.getToken()) ?? (await getServerToken());
+  const token = (await session.getToken(process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE ? { template: process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE } : undefined)) ?? (await getServerToken());
 
   const leaderboard = await apiJson<LeaderboardResponse>(`/api/leaderboard?tier=${encodeURIComponent(tier)}&page=0&size=50`, {
     token: token ?? undefined,
