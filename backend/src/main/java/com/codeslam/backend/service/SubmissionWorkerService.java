@@ -6,6 +6,7 @@ import com.codeslam.backend.entity.MatchEvent;
 import com.codeslam.backend.entity.MatchEntity;
 import com.codeslam.backend.entity.Problem;
 import com.codeslam.backend.entity.Submission;
+import com.codeslam.backend.entity.SubmissionQueue;
 import com.codeslam.backend.enums.EventType;
 import com.codeslam.backend.enums.Verdict;
 import com.codeslam.backend.judge.JudgeResult;
@@ -14,13 +15,13 @@ import com.codeslam.backend.repository.MatchEventRepository;
 import com.codeslam.backend.repository.MatchRepository;
 import com.codeslam.backend.repository.ProblemRepository;
 import com.codeslam.backend.repository.SubmissionRepository;
+import com.codeslam.backend.repository.SubmissionQueueRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -32,12 +33,10 @@ import com.codeslam.backend.websocket.MatchWebSocketPublisher;
 @Service
 public class SubmissionWorkerService {
 
-    private static final String QUEUE_KEY = "queue:submissions";
-
     @Value("${scheduling.enabled:true}")
     private boolean schedulingEnabled;
 
-    private final StringRedisTemplate redisTemplate;
+    private final SubmissionQueueRepository submissionQueueRepository;
     private final SubmissionRepository submissionRepository;
     private final MatchRepository matchRepository;
     private final ProblemRepository problemRepository;
@@ -49,12 +48,13 @@ public class SubmissionWorkerService {
     private final ObjectMapper objectMapper;
     private final MatchWebSocketPublisher matchWebSocketPublisher;
 
-    public SubmissionWorkerService(StringRedisTemplate redisTemplate, SubmissionRepository submissionRepository,
+    public SubmissionWorkerService(SubmissionQueueRepository submissionQueueRepository,
+            SubmissionRepository submissionRepository,
             MatchRepository matchRepository, ProblemRepository problemRepository,
             MatchStateService matchStateService, JudgeService judgeService, DamageService damageService,
             MatchEventRepository matchEventRepository, SimpMessagingTemplate messagingTemplate,
             ObjectMapper objectMapper, MatchWebSocketPublisher matchWebSocketPublisher) {
-        this.redisTemplate = redisTemplate;
+        this.submissionQueueRepository = submissionQueueRepository;
         this.submissionRepository = submissionRepository;
         this.matchRepository = matchRepository;
         this.problemRepository = problemRepository;
@@ -74,19 +74,28 @@ public class SubmissionWorkerService {
         if (!schedulingEnabled) {
             return;
         }
-        String submissionIdValue = redisTemplate.opsForList().rightPop(QUEUE_KEY, Duration.ofMillis(100));
-        if (submissionIdValue == null || submissionIdValue.isBlank()) {
+
+        var queuedSubmissionOpt = submissionQueueRepository.findNextUnprocessed();
+        if (queuedSubmissionOpt.isEmpty()) {
             return;
         }
 
-        UUID submissionId = UUID.fromString(submissionIdValue.trim());
+        SubmissionQueue queuedSubmission = queuedSubmissionOpt.get();
+        UUID submissionId = UUID.fromString(queuedSubmission.getSubmissionId());
+
         Submission submission = submissionRepository.findById(submissionId.toString()).orElse(null);
         if (submission == null || submission.getMatch() == null || submission.getProblem() == null) {
+            queuedSubmission.setProcessed(true);
+            queuedSubmission.setProcessedAt(Instant.now());
+            submissionQueueRepository.save(queuedSubmission);
             return;
         }
 
         MatchEntity match = matchRepository.findById(submission.getMatch().getId().toString()).orElse(null);
         if (match == null) {
+            queuedSubmission.setProcessed(true);
+            queuedSubmission.setProcessedAt(Instant.now());
+            submissionQueueRepository.save(queuedSubmission);
             return;
         }
 
@@ -104,6 +113,9 @@ public class SubmissionWorkerService {
             submission.setTotalCases(0);
             submission.setFirstAc(false);
             submissionRepository.save(submission);
+            queuedSubmission.setProcessed(true);
+            queuedSubmission.setProcessedAt(Instant.now());
+            submissionQueueRepository.save(queuedSubmission);
 
             messagingTemplate.convertAndSendToUser(submission.getUser().getId().toString(), "/queue/errors",
                     Map.of("type", "JUDGE_ERROR", "message", "Execution failed, you may resubmit"));
@@ -180,6 +192,11 @@ public class SubmissionWorkerService {
         }
 
         problemRepository.incrementBattleUseCount(submission.getProblem().getId());
+
+        // Mark as processed
+        queuedSubmission.setProcessed(true);
+        queuedSubmission.setProcessedAt(Instant.now());
+        submissionQueueRepository.save(queuedSubmission);
     }
 
     private Integer opponentRuntime(MatchStateService.MatchState state, Submission submission) {

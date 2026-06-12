@@ -3,6 +3,7 @@ package com.codeslam.backend.service;
 import com.codeslam.backend.dto.PowerUpUsedEventDto;
 import com.codeslam.backend.entity.MatchEntity;
 import com.codeslam.backend.entity.MatchEvent;
+import com.codeslam.backend.entity.PowerupLock;
 import com.codeslam.backend.entity.User;
 import com.codeslam.backend.enums.EventType;
 import com.codeslam.backend.enums.MatchStatus;
@@ -10,9 +11,9 @@ import com.codeslam.backend.enums.PowerUpType;
 import com.codeslam.backend.exception.ResourceNotFoundException;
 import com.codeslam.backend.repository.MatchEventRepository;
 import com.codeslam.backend.repository.MatchRepository;
+import com.codeslam.backend.repository.PowerupLockRepository;
 import com.codeslam.backend.repository.UserRepository;
 import com.codeslam.backend.websocket.MatchWebSocketPublisher;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +21,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -31,26 +31,23 @@ import org.springframework.web.server.ResponseStatusException;
 public class PowerUpService {
 
     private static final List<String> LOCK_KEYWORDS = List.of("for", "while", "if", "return", "def", "class");
-    private static final String MATCH_SESSIONS_PREFIX = "match:sessions:";
-    private static final String POWERUP_LOCK_PREFIX = "powerup:lock:";
-    private static final String HIDE_TESTCASES_PREFIX = "powerup:hidetc:";
 
-    private final StringRedisTemplate redisTemplate;
     private final MatchStateService matchStateService;
     private final MatchRepository matchRepository;
     private final UserRepository userRepository;
+    private final PowerupLockRepository powerupLockRepository;
     private final MatchEventRepository matchEventRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final MatchWebSocketPublisher matchWebSocketPublisher;
 
-    public PowerUpService(StringRedisTemplate redisTemplate, MatchStateService matchStateService,
-            MatchRepository matchRepository, UserRepository userRepository,
+    public PowerUpService(MatchStateService matchStateService,
+            MatchRepository matchRepository, UserRepository userRepository, PowerupLockRepository powerupLockRepository,
             MatchEventRepository matchEventRepository, SimpMessagingTemplate messagingTemplate,
             MatchWebSocketPublisher matchWebSocketPublisher) {
-        this.redisTemplate = redisTemplate;
         this.matchStateService = matchStateService;
         this.matchRepository = matchRepository;
         this.userRepository = userRepository;
+        this.powerupLockRepository = powerupLockRepository;
         this.matchEventRepository = matchEventRepository;
         this.messagingTemplate = messagingTemplate;
         this.matchWebSocketPublisher = matchWebSocketPublisher;
@@ -115,16 +112,14 @@ public class PowerUpService {
                     10000);
             case LOCK_KEYWORD -> {
                 String keyword = LOCK_KEYWORDS.get(ThreadLocalRandom.current().nextInt(LOCK_KEYWORDS.size()));
-                String lockKey = POWERUP_LOCK_PREFIX + matchId + ":" + opponentId;
-                redisTemplate.opsForHash().putAll(lockKey, Map.of("keyword", keyword));
-                redisTemplate.expire(lockKey, Duration.ofSeconds(30));
+                // Store powerup lock in database
+                PowerupLock lock = PowerupLock.create(matchId, opponentId, keyword, 30000);
+                powerupLockRepository.save(lock);
                 effectPayload = Map.of("type", "LOCK_KEYWORD", "keyword", keyword, "durationMs", 30000);
             }
             case FORCE_THEME_SWAP -> effectPayload = Map.of("type", "FORCE_THEME_SWAP", "durationMs", 15000);
             case REVERSE_KEYBOARD -> effectPayload = Map.of("type", "REVERSE_KEYBOARD", "durationMs", 3000);
             case HIDE_TESTCASES -> {
-                String hideKey = HIDE_TESTCASES_PREFIX + matchId + ":" + opponentId;
-                redisTemplate.opsForValue().set(hideKey, "1", Duration.ofSeconds(60));
                 effectPayload = Map.of("type", "HIDE_TESTCASES", "durationMs", 60000);
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported power-up");
@@ -156,10 +151,11 @@ public class PowerUpService {
                 "opponentSessionId", opponentSessionId));
     }
 
-    private String resolveOpponentSessionId(UUID matchId, String opponentId, boolean isPlayer1) {
-        Object value = redisTemplate.opsForHash().get(MATCH_SESSIONS_PREFIX + matchId,
-                isPlayer1 ? "p2SessionId" : "p1SessionId");
-        return value == null ? opponentId : value.toString();
+    
+
+    private String resolveOpponentSessionId(UUID matchUuid, String opponentId, boolean isPlayer1) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'resolveOpponentSessionId'");
     }
 
     private UUID parseUuid(String value, String fieldName) {

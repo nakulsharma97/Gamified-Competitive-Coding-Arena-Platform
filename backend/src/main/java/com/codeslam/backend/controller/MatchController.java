@@ -1,6 +1,5 @@
 package com.codeslam.backend.controller;
 
-import com.codeslam.backend.dto.AiCoachResponseDto;
 import com.codeslam.backend.dto.MatchDto;
 import com.codeslam.backend.dto.MatchEventDto;
 import com.codeslam.backend.dto.PagedResponse;
@@ -10,7 +9,6 @@ import com.codeslam.backend.entity.Submission;
 import com.codeslam.backend.exception.ResourceNotFoundException;
 import com.codeslam.backend.repository.MatchRepository;
 import com.codeslam.backend.repository.SubmissionRepository;
-import com.codeslam.backend.service.AiCoachService;
 import com.codeslam.backend.service.MatchService;
 import java.util.List;
 import java.util.UUID;
@@ -32,14 +30,12 @@ public class MatchController {
     private final MatchService matchService;
     private final MatchRepository matchRepository;
     private final SubmissionRepository submissionRepository;
-    private final AiCoachService aiCoachService;
 
     public MatchController(MatchService matchService, MatchRepository matchRepository,
-            SubmissionRepository submissionRepository, AiCoachService aiCoachService) {
+            SubmissionRepository submissionRepository) {
         this.matchService = matchService;
         this.matchRepository = matchRepository;
         this.submissionRepository = submissionRepository;
-        this.aiCoachService = aiCoachService;
     }
 
     @GetMapping("/history")
@@ -64,33 +60,4 @@ public class MatchController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/{matchId}/coach")
-    public ResponseEntity<AiCoachResponseDto> getCoachNotes(@PathVariable UUID matchId,
-            Authentication authentication) {
-        String clerkUserId = (String) authentication.getPrincipal();
-
-        MatchEntity match = matchRepository.findById(matchId)
-                .orElseThrow(() -> new ResourceNotFoundException("Match not found"));
-
-        List<Submission> mySubmissions = submissionRepository
-                .findByMatchIdOrderBySubmittedAtAsc(matchId)
-                .stream()
-                .filter(s -> s.getUser() != null && clerkUserId.equals(s.getUser().getClerkId()))
-                .toList();
-
-        Submission latest = mySubmissions.isEmpty() ? null : mySubmissions.get(mySubmissions.size() - 1);
-        Problem problem = match.getProblem();
-
-        AiCoachResponseDto result = aiCoachService.generateCoach(
-                problem == null ? "" : problem.getTitle(),
-                problem != null && problem.getDifficulty() != null ? problem.getDifficulty().name() : "MEDIUM",
-                problem == null || problem.getDescription() == null ? "" : problem.getDescription(),
-                latest != null ? latest.getCode() : "(no submission)",
-                latest != null && latest.getLanguage() != null ? latest.getLanguage().name() : "UNKNOWN",
-                latest != null && latest.getVerdict() != null ? latest.getVerdict().name() : "NO_SUBMISSION",
-                latest != null && latest.getPassedCases() != null ? latest.getPassedCases() : 0,
-                latest != null && latest.getTotalCases() != null ? latest.getTotalCases() : 0);
-
-        return ResponseEntity.ok(result);
-    }
 }

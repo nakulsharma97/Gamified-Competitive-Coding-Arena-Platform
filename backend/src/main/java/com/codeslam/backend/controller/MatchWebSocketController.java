@@ -8,6 +8,7 @@ import com.codeslam.backend.dto.SubmitCodeRequest;
 import com.codeslam.backend.entity.MatchEntity;
 import com.codeslam.backend.entity.Problem;
 import com.codeslam.backend.entity.Submission;
+import com.codeslam.backend.entity.SubmissionQueue;
 import com.codeslam.backend.entity.User;
 import com.codeslam.backend.enums.Language;
 import com.codeslam.backend.enums.Verdict;
@@ -16,6 +17,9 @@ import com.codeslam.backend.service.MatchStateService;
 import com.codeslam.backend.service.PowerUpService;
 import com.codeslam.backend.service.UserService;
 import com.codeslam.backend.repository.MatchRepository;
+import com.codeslam.backend.repository.PowerupLockRepository;
+import com.codeslam.backend.repository.SpectatorSessionRepository;
+import com.codeslam.backend.repository.SubmissionQueueRepository;
 import com.codeslam.backend.repository.SubmissionRepository;
 import com.codeslam.backend.websocket.MatchWebSocketPublisher;
 import java.security.Principal;
@@ -23,7 +27,6 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
@@ -44,7 +47,6 @@ import com.codeslam.backend.enums.MatchStatus;
 @Controller
 public class MatchWebSocketController {
 
-    private static final String SUBMISSION_QUEUE_KEY = "queue:submissions";
     private static final String ERROR_QUEUE = "/queue/errors";
 
     private final UserService userService;
@@ -52,26 +54,29 @@ public class MatchWebSocketController {
     private final MatchStateService matchStateService;
     private final PowerUpService powerUpService;
     private final SubmissionRepository submissionRepository;
+    private final SubmissionQueueRepository submissionQueueRepository;
+    private final PowerupLockRepository powerupLockRepository;
+    private final SpectatorSessionRepository spectatorSessionRepository;
     private final MatchRepository matchRepository;
-    private final StringRedisTemplate redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final MatchWebSocketPublisher matchWebSocketPublisher;
 
-    private static final String SPECTATOR_SESSION_PREFIX = "match:spectator-session:";
-    private static final String SPECTATOR_SET_PREFIX = "match:spectators:";
-
     public MatchWebSocketController(UserService userService, MatchmakingService matchmakingService,
             MatchStateService matchStateService, PowerUpService powerUpService,
-            SubmissionRepository submissionRepository, MatchRepository matchRepository,
-            StringRedisTemplate redisTemplate, SimpMessagingTemplate messagingTemplate,
+            SubmissionRepository submissionRepository, SubmissionQueueRepository submissionQueueRepository,
+            PowerupLockRepository powerupLockRepository, SpectatorSessionRepository spectatorSessionRepository,
+            MatchRepository matchRepository,
+            SimpMessagingTemplate messagingTemplate,
             MatchWebSocketPublisher matchWebSocketPublisher) {
         this.userService = userService;
         this.matchmakingService = matchmakingService;
         this.matchStateService = matchStateService;
         this.powerUpService = powerUpService;
         this.submissionRepository = submissionRepository;
+        this.submissionQueueRepository = submissionQueueRepository;
+        this.powerupLockRepository = powerupLockRepository;
+        this.spectatorSessionRepository = spectatorSessionRepository;
         this.matchRepository = matchRepository;
-        this.redisTemplate = redisTemplate;
         this.messagingTemplate = messagingTemplate;
         this.matchWebSocketPublisher = matchWebSocketPublisher;
     }
@@ -126,11 +131,10 @@ public class MatchWebSocketController {
 
         MatchEntity match = resolveMatch(request.matchId());
 
-        Map<Object, Object> lockData = redisTemplate.opsForHash().entries("powerup:lock:" + request.matchId() + ":"
-                + userId);
-        if (lockData != null && !lockData.isEmpty()) {
-            Object keyword = lockData.get("keyword");
-            String lockedKeyword = keyword == null ? "" : keyword.toString();
+        // Check for active powerup locks
+        var activeLock = powerupLockRepository.findActiveLock(request.matchId(), userId, Instant.now());
+        if (activeLock.isPresent()) {
+            String lockedKeyword = activeLock.get().getKeyword();
             if (!lockedKeyword.isBlank() && request.code().contains(lockedKeyword)) {
                 sendUserError(clerkId, Map.of("type", "KEYWORD_LOCKED", "keyword", lockedKeyword));
                 return;
@@ -150,9 +154,13 @@ public class MatchWebSocketController {
                 .totalCases(0)
                 .firstAc(false)
                 .build();
-        submission.setId(UUID.randomUUID());
+        submission.setId(UUID.randomUUID().toString());
         submissionRepository.save(submission);
-        redisTemplate.opsForList().leftPush(SUBMISSION_QUEUE_KEY, submission.getId().toString());
+
+        // Add to database queue instead of Redis
+        long queuePosition = submissionQueueRepository.count() + 1;
+        SubmissionQueue queuedSubmission = SubmissionQueue.create(submission.getId().toString(), queuePosition);
+        submissionQueueRepository.save(queuedSubmission);
 
         matchWebSocketPublisher.publishCodeSubmitted(request.matchId(), Map.of(
                 "matchId", request.matchId(),
@@ -229,8 +237,10 @@ public class MatchWebSocketController {
             return;
         }
 
-        redisTemplate.opsForSet().add(spectatorSetKey(matchId), sessionId);
-        redisTemplate.opsForValue().set(spectatorSessionKey(sessionId), matchId);
+        // Add to database instead of Redis
+        com.codeslam.backend.entity.SpectatorSession spectatorSession = com.codeslam.backend.entity.SpectatorSession
+                .create(matchId, sessionId);
+        spectatorSessionRepository.save(spectatorSession);
         broadcastSpectatorCount(matchId);
     }
 
@@ -260,19 +270,19 @@ public class MatchWebSocketController {
             return;
         }
 
-        String matchId = redisTemplate.opsForValue().get(spectatorSessionKey(sessionId));
-        if (matchId == null || matchId.isBlank()) {
+        var spectatorSessionOpt = spectatorSessionRepository.findBySessionId(sessionId);
+        if (spectatorSessionOpt.isEmpty()) {
             return;
         }
 
-        redisTemplate.opsForSet().remove(spectatorSetKey(matchId), sessionId);
-        redisTemplate.delete(spectatorSessionKey(sessionId));
+        String matchId = spectatorSessionOpt.get().getMatchId();
+        spectatorSessionRepository.deleteBySessionId(sessionId);
         broadcastSpectatorCount(matchId);
     }
 
     private void broadcastSpectatorCount(String matchId) {
-        Long count = redisTemplate.opsForSet().size(spectatorSetKey(matchId));
-        Map<String, Object> payload = Map.of("matchId", matchId, "count", count == null ? 0L : count);
+        long count = spectatorSessionRepository.findByMatchId(matchId).size();
+        Map<String, Object> payload = Map.of("matchId", matchId, "count", count);
         messagingTemplate.convertAndSend("/topic/matches/" + matchId + "/spectators", payload);
         messagingTemplate.convertAndSend("/topic/rooms/" + matchId + "/spectators", payload);
     }
@@ -308,14 +318,6 @@ public class MatchWebSocketController {
         String remainder = destination.substring(prefix.length());
         int separator = remainder.indexOf('/');
         return separator < 0 ? remainder : remainder.substring(0, separator);
-    }
-
-    private String spectatorSessionKey(String sessionId) {
-        return SPECTATOR_SESSION_PREFIX + sessionId;
-    }
-
-    private String spectatorSetKey(String matchId) {
-        return SPECTATOR_SET_PREFIX + matchId;
     }
 
     private Language parseLanguage(String language) {

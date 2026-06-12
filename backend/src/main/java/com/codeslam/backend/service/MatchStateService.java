@@ -7,7 +7,6 @@ import com.codeslam.backend.entity.Submission;
 import com.codeslam.backend.enums.MatchStatus;
 import com.codeslam.backend.enums.Verdict;
 import com.codeslam.backend.event.MatchCompletedEvent;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -15,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,15 +21,13 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class MatchStateService {
 
-    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final com.codeslam.backend.repository.MatchRepository matchRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
 
-    public MatchStateService(StringRedisTemplate redisTemplate, ObjectMapper objectMapper,
+    public MatchStateService(ObjectMapper objectMapper,
             com.codeslam.backend.repository.MatchRepository matchRepository,
             ApplicationEventPublisher applicationEventPublisher) {
-        this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
         this.matchRepository = matchRepository;
         this.applicationEventPublisher = applicationEventPublisher;
@@ -244,11 +240,7 @@ public class MatchStateService {
                 submission.getTotalCases(),
                 updatedPlayer1Hp,
                 updatedPlayer2Hp,
-                winnerId,
-                Map.of(
-                        "damageDealt", damageResult.getDamageDealt(),
-                        "selfDamage", damageResult.getSelfDamage()),
-                java.util.List.of());
+                winnerId);
     }
 
     public MatchState applyPowerUp(MatchState state, UUID userId) {
@@ -290,23 +282,13 @@ public class MatchStateService {
     }
 
     public MatchState load(UUID matchId) {
-        String payload = redisTemplate.opsForValue().get(cacheKey(matchId));
-        if (payload == null || payload.isBlank()) {
-            return null;
-        }
-        try {
-            return objectMapper.readValue(payload, MatchState.class);
-        } catch (JsonProcessingException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to read match state");
-        }
+        // No longer using Redis - state is transient and recreated from database
+        return null;
     }
 
     public void save(MatchState state) {
-        try {
-            redisTemplate.opsForValue().set(cacheKey(state.matchId()), objectMapper.writeValueAsString(state));
-        } catch (JsonProcessingException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to write match state");
-        }
+        // No longer using Redis - state is transient, changes are persisted via
+        // MatchEntity
     }
 
     private MatchState normalize(MatchState state) {

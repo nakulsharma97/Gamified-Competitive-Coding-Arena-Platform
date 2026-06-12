@@ -1,12 +1,11 @@
 package com.codeslam.backend.matchmaking;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -22,34 +21,29 @@ import com.codeslam.backend.match.MatchStateService;
 import com.codeslam.backend.repository.MatchRepository;
 import com.codeslam.backend.repository.ProblemRepository;
 import com.codeslam.backend.repository.UserRepository;
-import java.time.Duration;
+import com.codeslam.backend.websocket.MatchWebSocketPublisher;
+
+import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentMap;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.data.redis.core.HashOperations;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import com.codeslam.backend.websocket.MatchWebSocketPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class MatchmakingServiceTest {
-
-        @Mock
-        private RedisTemplate<String, String> redisTemplate;
 
         @Mock
         private MatchRepository matchRepository;
@@ -75,30 +69,21 @@ class MatchmakingServiceTest {
         @Mock
         private MatchWebSocketPublisher matchWebSocketPublisher;
 
-        @Mock
-        private HashOperations<String, Object, Object> hashOperations;
-
-        @Mock
-        private ZSetOperations<String, String> zSetOperations;
-
-        @Mock
-        private ValueOperations<String, String> valueOperations;
-
         private MatchmakingService matchmakingService;
 
         @BeforeEach
+        @SuppressWarnings("unchecked")
         void setUp() {
-                lenient().when(redisTemplate.opsForHash()).thenReturn(hashOperations);
-                lenient().when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-                lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-                matchmakingService = new MatchmakingService(redisTemplate, matchRepository, problemRepository,
-                                userRepository,
-                                problemMapper, userMapper, messagingTemplate, matchStateService,
-                                matchWebSocketPublisher);
+                matchmakingService = new MatchmakingService(matchRepository, problemRepository,
+                                userRepository, problemMapper, userMapper, messagingTemplate,
+                                matchStateService, matchWebSocketPublisher);
+                // Scheduling is disabled during unit tests; methods are invoked directly.
+                ReflectionTestUtils.setField(matchmakingService, "schedulingEnabled", true);
         }
 
         @Test
-        void disconnectStoresGraceKeyNotifiesOpponentAndTimeoutEndsMatch() {
+        @SuppressWarnings("unchecked")
+        void disconnectStoresGraceKeyNotifiesOpponentAndTimeoutEndsMatch() throws Exception {
                 UUID matchId = UUID.randomUUID();
                 UUID player1Id = UUID.randomUUID();
                 UUID player2Id = UUID.randomUUID();
@@ -106,24 +91,24 @@ class MatchmakingServiceTest {
                 String player2SessionId = "session-p2";
 
                 MatchEntity match = createActiveMatch(matchId, player1Id, player2Id);
-                when(redisTemplate.keys("queue:meta:*")).thenReturn(Set.of("queue:meta:other"));
-                when(hashOperations.entries("queue:meta:other")).thenReturn(Map.of("sessionId", "other-session"));
-                when(redisTemplate.keys("match:sessions:*")).thenReturn(Set.of("match:sessions:" + matchId));
-                when(hashOperations.entries("match:sessions:" + matchId)).thenReturn(Map.of(
-                                "p1SessionId", player1SessionId,
-                                "p2SessionId", player2SessionId));
                 when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
-                when(redisTemplate.hasKey("disconnect:" + matchId + ":" + player2Id)).thenReturn(false);
+
+                seedSession(player1SessionId, player1Id.toString());
+                seedSession(player2SessionId, player2Id.toString());
+                seedMatchSessions(matchId, player1SessionId, player2SessionId);
 
                 matchmakingService.handleDisconnect(player1SessionId);
 
-                verify(valueOperations).set(eq("disconnect:" + matchId + ":" + player1Id), eq("1"),
-                                eq(Duration.ofSeconds(60)));
+                ConcurrentMap<String, Long> expiry = (ConcurrentMap<String, Long>) ReflectionTestUtils
+                                .getField(matchmakingService, "disconnectExpiry");
+                assertTrue(expiry.containsKey("disconnect:" + matchId + ":" + player1Id));
+                assertFalse(expiry.containsKey("disconnect:" + matchId + ":" + player2Id));
+
                 verify(messagingTemplate).convertAndSendToUser(eq(player2SessionId), eq("/queue/match-state"),
                                 eq(Map.of("type", "OPPONENT_DISCONNECTED", "reconnectWindowSeconds", 60)));
 
-                when(zSetOperations.rangeByScore(eq("disconnect:index"), anyDouble(), anyDouble()))
-                                .thenReturn(Set.of("disconnect:" + matchId + ":" + player1Id));
+                // Force the grace key to look expired, then run the timeout sweeper.
+                expiry.put("disconnect:" + matchId + ":" + player1Id, 0L);
 
                 matchmakingService.processDisconnectTimeouts();
 
@@ -131,7 +116,8 @@ class MatchmakingServiceTest {
         }
 
         @Test
-        void secondDisconnectVoidsMatchWithoutApplyingEloChanges() {
+        @SuppressWarnings("unchecked")
+        void secondDisconnectVoidsMatchWithoutApplyingEloChanges() throws Exception {
                 UUID matchId = UUID.randomUUID();
                 UUID player1Id = UUID.randomUUID();
                 UUID player2Id = UUID.randomUUID();
@@ -139,15 +125,11 @@ class MatchmakingServiceTest {
                 String player2SessionId = "session-p2";
 
                 MatchEntity match = createActiveMatch(matchId, player1Id, player2Id);
-                when(redisTemplate.keys("queue:meta:*")).thenReturn(Set.of("queue:meta:other"));
-                when(hashOperations.entries("queue:meta:other")).thenReturn(Map.of("sessionId", "other-session"));
-                when(redisTemplate.keys("match:sessions:*")).thenReturn(Set.of("match:sessions:" + matchId));
-                when(hashOperations.entries("match:sessions:" + matchId)).thenReturn(Map.of(
-                                "p1SessionId", player1SessionId,
-                                "p2SessionId", player2SessionId));
                 when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
-                when(redisTemplate.hasKey("disconnect:" + matchId + ":" + player2Id)).thenReturn(false);
-                when(redisTemplate.hasKey("disconnect:" + matchId + ":" + player1Id)).thenReturn(true);
+
+                seedSession(player1SessionId, player1Id.toString());
+                seedSession(player2SessionId, player2Id.toString());
+                seedMatchSessions(matchId, player1SessionId, player2SessionId);
 
                 matchmakingService.handleDisconnect(player1SessionId);
                 matchmakingService.handleDisconnect(player2SessionId);
@@ -159,6 +141,7 @@ class MatchmakingServiceTest {
         }
 
         @Test
+        @SuppressWarnings("unchecked")
         void reconnectClearsPendingDisconnectStateForActiveMatch() {
                 UUID matchId = UUID.randomUUID();
                 UUID player1Id = UUID.randomUUID();
@@ -169,10 +152,34 @@ class MatchmakingServiceTest {
                 when(matchRepository.findByPlayer1IdOrPlayer2Id(anyString(), anyString()))
                                 .thenReturn(List.of(match));
 
+                ConcurrentMap<String, Long> expiry = (ConcurrentMap<String, Long>) ReflectionTestUtils
+                                .getField(matchmakingService, "disconnectExpiry");
+                expiry.put("disconnect:" + matchId + ":" + player1Id, System.currentTimeMillis() + 60_000L);
+
                 matchmakingService.handleReconnect(player1Id.toString());
 
-                verify(redisTemplate).delete("disconnect:" + matchId + ":" + player1Id);
-                verify(zSetOperations).remove("disconnect:index", "disconnect:" + matchId + ":" + player1Id);
+                assertFalse(expiry.containsKey("disconnect:" + matchId + ":" + player1Id));
+        }
+
+        // --- helpers ---------------------------------------------------------
+
+        @SuppressWarnings("unchecked")
+        private void seedSession(String sessionId, String userId) {
+                ConcurrentMap<String, String> owners = (ConcurrentMap<String, String>) ReflectionTestUtils
+                                .getField(matchmakingService, "sessionOwners");
+                owners.put(sessionId, userId);
+        }
+
+        @SuppressWarnings("unchecked")
+        private void seedMatchSessions(UUID matchId, String p1SessionId, String p2SessionId) throws Exception {
+                ConcurrentMap<String, Object> sessions = (ConcurrentMap<String, Object>) ReflectionTestUtils
+                                .getField(matchmakingService, "matchSessions");
+                Class<?> recordClass = Class.forName(
+                                "com.codeslam.backend.matchmaking.MatchmakingService$MatchSessions");
+                Constructor<?> ctor = recordClass.getDeclaredConstructors()[0];
+                ctor.setAccessible(true);
+                Object instance = ctor.newInstance(p1SessionId, p2SessionId);
+                sessions.put(matchId.toString(), instance);
         }
 
         private MatchEntity createActiveMatch(UUID matchId, UUID player1Id, UUID player2Id) {

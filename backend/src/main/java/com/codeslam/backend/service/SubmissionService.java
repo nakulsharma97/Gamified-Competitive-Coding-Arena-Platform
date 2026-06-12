@@ -6,6 +6,7 @@ import com.codeslam.backend.dto.SubmitCodeRequest;
 import com.codeslam.backend.entity.MatchEntity;
 import com.codeslam.backend.entity.Problem;
 import com.codeslam.backend.entity.Submission;
+import com.codeslam.backend.entity.SubmissionQueue;
 import com.codeslam.backend.entity.TestCase;
 import com.codeslam.backend.entity.User;
 import com.codeslam.backend.enums.Language;
@@ -15,12 +16,12 @@ import com.codeslam.backend.judge.JudgeResult;
 import com.codeslam.backend.judge.JudgeService;
 import com.codeslam.backend.repository.MatchRepository;
 import com.codeslam.backend.repository.ProblemRepository;
+import com.codeslam.backend.repository.SubmissionQueueRepository;
 import com.codeslam.backend.repository.SubmissionRepository;
 import com.codeslam.backend.repository.TestCaseRepository;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -30,25 +31,23 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class SubmissionService {
 
-    private static final String QUEUE_KEY = "queue:submissions";
-
     private final SubmissionRepository submissionRepository;
     private final MatchRepository matchRepository;
     private final ProblemRepository problemRepository;
     private final TestCaseRepository testCaseRepository;
     private final UserService userService;
-    private final StringRedisTemplate redisTemplate;
+    private final SubmissionQueueRepository submissionQueueRepository;
     private final JudgeService judgeService;
 
     public SubmissionService(SubmissionRepository submissionRepository, MatchRepository matchRepository,
             ProblemRepository problemRepository, TestCaseRepository testCaseRepository, UserService userService,
-            StringRedisTemplate redisTemplate, JudgeService judgeService) {
+            SubmissionQueueRepository submissionQueueRepository, JudgeService judgeService) {
         this.submissionRepository = submissionRepository;
         this.matchRepository = matchRepository;
         this.problemRepository = problemRepository;
         this.testCaseRepository = testCaseRepository;
         this.userService = userService;
-        this.redisTemplate = redisTemplate;
+        this.submissionQueueRepository = submissionQueueRepository;
         this.judgeService = judgeService;
     }
 
@@ -63,7 +62,7 @@ public class SubmissionService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid matchId");
         }
 
-        MatchEntity match = matchRepository.findById(matchId)
+        MatchEntity match = matchRepository.findById(matchId.toString())
                 .orElseThrow(() -> new ResourceNotFoundException("Match not found"));
 
         boolean participant = user.getId().equals(match.getPlayer1().getId())
@@ -87,7 +86,12 @@ public class SubmissionService {
                 .build();
 
         Submission saved = submissionRepository.save(submission);
-        redisTemplate.opsForList().leftPush(QUEUE_KEY, saved.getId().toString());
+
+        // Add to database queue instead of Redis
+        long queuePosition = submissionQueueRepository.count() + 1;
+        SubmissionQueue queuedSubmission = SubmissionQueue.create(saved.getId(), queuePosition);
+        submissionQueueRepository.save(queuedSubmission);
+
         return new SubmissionJobResponse(saved.getId());
     }
 

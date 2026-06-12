@@ -4,10 +4,6 @@ spring:
     username: root
     password: 12345
     driver-class-name: com.mysql.cj.jdbc.Driver
-  data:
-    redis:
-      url: redis://localhost:6379
-      timeout: 1000ms
   jpa:
     hibernate:
       ddl-auto: none

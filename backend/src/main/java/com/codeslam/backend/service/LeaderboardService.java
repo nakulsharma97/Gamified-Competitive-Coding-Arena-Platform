@@ -16,7 +16,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,14 +25,12 @@ public class LeaderboardService {
     private final UserRepository userRepository;
     private final MatchRepository matchRepository;
     private final ProblemRepository problemRepository;
-    private final StringRedisTemplate redisTemplate;
 
     public LeaderboardService(UserRepository userRepository, MatchRepository matchRepository,
-            ProblemRepository problemRepository, StringRedisTemplate redisTemplate) {
+            ProblemRepository problemRepository) {
         this.userRepository = userRepository;
         this.matchRepository = matchRepository;
         this.problemRepository = problemRepository;
-        this.redisTemplate = redisTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -79,7 +76,7 @@ public class LeaderboardService {
     @Transactional(readOnly = true)
     public StatsResponseDto getStats() {
         return StatsResponseDto.builder()
-                .onlinePlayers(parseLong(redisTemplate.opsForValue().get("stats:online")))
+                .onlinePlayers(0L) // Online players tracking removed with Redis
                 .matchesToday(matchRepository.countByCreatedAtAfter(startOfTodayUtc()))
                 .totalProblems(problemRepository.count())
                 .totalUsers(userRepository.count())

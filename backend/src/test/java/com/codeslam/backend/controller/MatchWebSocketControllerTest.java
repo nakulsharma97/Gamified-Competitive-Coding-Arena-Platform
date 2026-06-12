@@ -12,6 +12,9 @@ import com.codeslam.backend.entity.MatchEntity;
 import com.codeslam.backend.entity.User;
 import com.codeslam.backend.enums.MatchStatus;
 import com.codeslam.backend.matchmaking.MatchmakingService;
+import com.codeslam.backend.repository.PowerupLockRepository;
+import com.codeslam.backend.repository.SpectatorSessionRepository;
+import com.codeslam.backend.repository.SubmissionQueueRepository;
 import com.codeslam.backend.service.MatchStateService;
 import com.codeslam.backend.service.PowerUpService;
 import com.codeslam.backend.service.UserService;
@@ -21,13 +24,13 @@ import com.codeslam.backend.websocket.MatchWebSocketPublisher;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,10 +52,16 @@ class MatchWebSocketControllerTest {
     private SubmissionRepository submissionRepository;
 
     @Mock
-    private MatchRepository matchRepository;
+    private SubmissionQueueRepository submissionQueueRepository;
 
     @Mock
-    private StringRedisTemplate redisTemplate;
+    private PowerupLockRepository powerupLockRepository;
+
+    @Mock
+    private SpectatorSessionRepository spectatorSessionRepository;
+
+    @Mock
+    private MatchRepository matchRepository;
 
     @Mock
     private SimpMessagingTemplate messagingTemplate;
@@ -65,7 +74,8 @@ class MatchWebSocketControllerTest {
     @BeforeEach
     void setUp() {
         controller = new MatchWebSocketController(userService, matchmakingService, matchStateService, powerUpService,
-                submissionRepository, matchRepository, redisTemplate, messagingTemplate, matchWebSocketPublisher);
+                submissionRepository, submissionQueueRepository, powerupLockRepository, spectatorSessionRepository,
+                matchRepository, messagingTemplate, matchWebSocketPublisher);
     }
 
     @Test
@@ -97,6 +107,7 @@ class MatchWebSocketControllerTest {
                 MatchStatus.COMPLETED,
                 true);
         when(matchStateService.getMatchState(matchId.toString())).thenReturn(endedState);
+        when(powerupLockRepository.findActiveLock(anyString(), anyString(), any())).thenReturn(Optional.empty());
 
         controller.handleSubmit(new SubmitCodeRequest(matchId.toString(), "class Main {}", "java"), principal);
 

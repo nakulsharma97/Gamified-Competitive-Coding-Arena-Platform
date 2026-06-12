@@ -15,9 +15,6 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-  data:
-    redis:
-      url: ${SPRING_DATA_REDIS_URL:${REDIS_URL:redis://localhost:6379}}
 clerk:
   jwks-url: ${CLERK_JWKS_URL:https://your-clerk-domain/.well-known/jwks.json}
   webhook-secret: ${CLERK_WEBHOOK_SECRET:}
@@ -95,8 +92,3 @@ judge0:
 submission:
   worker:
     threads: 10
-ai:
-  anthropic:
-    api-key: ${ANTHROPIC_API_KEY:}
-    model: ${ANTHROPIC_MODEL:claude-sonnet-4-20250514}
-  vercel-og-base-url: ${VERCEL_OG_BASE_URL:}

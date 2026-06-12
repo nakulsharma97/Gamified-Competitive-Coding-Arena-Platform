@@ -23,7 +23,7 @@ public class LeaderboardController {
 
     @GetMapping("/leaderboard")
     public ResponseEntity<LeaderboardResponseDto> getLeaderboard(Pageable pageable, Authentication authentication,
-            @RequestParam(required = false) String tier) {
+            @RequestParam(name = "tier", required = false) String tier) {
         String clerkId = authentication == null ? null : (String) authentication.getPrincipal();
         return ResponseEntity.ok(leaderboardService.getLeaderboard(pageable, clerkId, tier));
     }

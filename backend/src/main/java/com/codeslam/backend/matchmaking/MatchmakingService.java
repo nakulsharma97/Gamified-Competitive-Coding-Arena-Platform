@@ -15,6 +15,7 @@ import com.codeslam.backend.repository.MatchRepository;
 import com.codeslam.backend.repository.ProblemRepository;
 import com.codeslam.backend.repository.UserRepository;
 import com.codeslam.backend.websocket.MatchWebSocketPublisher;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,36 +26,36 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Qualifier;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * Matchmaking service. Previously backed by Redis ZSETs, hashes, and key-space
+ * notifications. Replaced with in-memory data structures for a single-instance
+ * deployment. For multi-instance HA, swap the {@link ConcurrentMap} fields for a
+ * distributed cache or a database-backed implementation.
+ */
 @Service
 public class MatchmakingService {
 
-    private static final String QUEUE_KEY = "queue:ranked";
-    private static final String META_PREFIX = "queue:meta:";
-    private static final String SESSION_PREFIX = "ws:session:";
-    private static final String DISCONNECT_PREFIX = "disconnect:";
-    private static final String DISCONNECT_INDEX_KEY = "disconnect:index";
-    private static final String ONLINE_KEY = "stats:online";
     private static final int DEFAULT_ELO_WINDOW = 100;
+    private static final int DEFAULT_HP = 100;
     private static final long QUEUE_TIMEOUT_MS = 45_000L;
     private static final long WAIT_THRESHOLD_MS = 15_000L;
     private static final int WINDOW_GROWTH = 50;
+    private static final long DISCONNECT_GRACE_MS = 60_000L;
+    private static final String DISCONNECT_PREFIX = "disconnect:";
 
     @Value("${scheduling.enabled:true}")
     private boolean schedulingEnabled;
-    private static final int DEFAULT_HP = 100;
-    private static final long DISCONNECT_GRACE_MS = 60_000L;
 
-    private final RedisTemplate<String, String> redisTemplate;
     private final MatchRepository matchRepository;
     private final ProblemRepository problemRepository;
     private final UserRepository userRepository;
@@ -64,12 +65,25 @@ public class MatchmakingService {
     private final MatchStateService matchStateService;
     private final MatchWebSocketPublisher matchWebSocketPublisher;
 
-    public MatchmakingService(@Qualifier("matchRedisTemplate") RedisTemplate<String, String> redisTemplate,
-            MatchRepository matchRepository, ProblemRepository problemRepository, UserRepository userRepository,
-            ProblemMapper problemMapper, UserMapper userMapper, SimpMessagingTemplate messagingTemplate,
-            @Qualifier("redisMatchStateService") MatchStateService matchStateService,
+    /** Queue member -> elo score (mirrors the old ZSET range). */
+    private final ConcurrentMap<String, Double> queue = new ConcurrentHashMap<>();
+    /** Per-user metadata that used to live in a Redis hash. */
+    private final ConcurrentMap<String, QueueEntry> meta = new ConcurrentHashMap<>();
+    /** Session id -> user id lookup (replaces the old session key/value pair). */
+    private final ConcurrentMap<String, String> sessionOwners = new ConcurrentHashMap<>();
+    /** matchId -> p1/p2 session ids (replaces the old match:sessions:* hash). */
+    private final ConcurrentMap<String, MatchSessions> matchSessions = new ConcurrentHashMap<>();
+    /** Disconnect grace state, keyed by {@code disconnect:<matchId>:<userId>}. */
+    private final ConcurrentMap<String, Long> disconnectExpiry = new ConcurrentHashMap<>();
+
+    public MatchmakingService(MatchRepository matchRepository,
+            ProblemRepository problemRepository,
+            UserRepository userRepository,
+            ProblemMapper problemMapper,
+            UserMapper userMapper,
+            SimpMessagingTemplate messagingTemplate,
+            MatchStateService matchStateService,
             MatchWebSocketPublisher matchWebSocketPublisher) {
-        this.redisTemplate = redisTemplate;
         this.matchRepository = matchRepository;
         this.problemRepository = problemRepository;
         this.userRepository = userRepository;
@@ -81,35 +95,32 @@ public class MatchmakingService {
     }
 
     public void joinQueue(String userId, int userElo, String sessionId) {
-        String resolvedSessionId = sessionId == null ? userId : sessionId;
-        redisTemplate.opsForZSet().add(QUEUE_KEY, userId, (double) userElo);
-        redisTemplate.opsForHash().putAll(META_PREFIX + userId, Map.of(
-                "sessionId", resolvedSessionId,
-                "joinedAt", String.valueOf(System.currentTimeMillis()),
-                "eloWindow", String.valueOf(DEFAULT_ELO_WINDOW),
-                "timeoutAt", String.valueOf(System.currentTimeMillis() + QUEUE_TIMEOUT_MS)));
-        Long queueSize = Optional.ofNullable(redisTemplate.opsForZSet().size(QUEUE_KEY)).orElse(0L);
-        redisTemplate.opsForValue().increment(ONLINE_KEY);
+        if (userId == null || userId.isBlank()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        queue.put(userId, (double) userElo);
+        meta.put(userId, new QueueEntry(sessionId, now, now + QUEUE_TIMEOUT_MS, DEFAULT_ELO_WINDOW));
+        if (sessionId != null && !sessionId.isBlank()) {
+            sessionOwners.put(sessionId, userId);
+        }
         messagingTemplate.convertAndSendToUser(userId, "/queue/queue-status",
-                Map.of("status", "SEARCHING", "queueSize", queueSize));
+                Map.of("status", "SEARCHING", "queueSize", queue.size()));
     }
 
     public void registerSession(String sessionId, String userId) {
         if (sessionId == null || sessionId.isBlank() || userId == null || userId.isBlank()) {
             return;
         }
-
-        redisTemplate.opsForValue().set(SESSION_PREFIX + sessionId, userId, java.time.Duration.ofHours(2));
+        sessionOwners.put(sessionId, userId);
     }
 
     public void leaveQueue(String userId) {
         if (userId == null || userId.isBlank()) {
             return;
         }
-        Long removed = redisTemplate.opsForZSet().remove(QUEUE_KEY, userId);
-        redisTemplate.delete(META_PREFIX + userId);
-        if (removed != null && removed > 0) {
-            redisTemplate.opsForValue().decrement(ONLINE_KEY);
+        if (queue.remove(userId) != null) {
+            meta.remove(userId);
         }
     }
 
@@ -118,7 +129,43 @@ public class MatchmakingService {
     }
 
     public long getQueueSize() {
-        return Optional.ofNullable(redisTemplate.opsForZSet().size(QUEUE_KEY)).orElse(0L);
+        return queue.size();
+    }
+
+    public void handleDisconnect(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        String resolvedUserId = sessionOwners.remove(sessionId);
+
+        // Drop the user from the matchmaking queue if they were in it.
+        if (resolvedUserId != null) {
+            QueueEntry entry = meta.get(resolvedUserId);
+            if (entry != null && Objects.equals(sessionId, entry.sessionId())) {
+                leaveQueue(resolvedUserId);
+            }
+        }
+
+        // Look up any active match tied to this session and start the grace timer.
+        handleActiveDisconnect(sessionId);
+    }
+
+    public void handleReconnect(String clerkId) {
+        if (clerkId == null || clerkId.isBlank()) {
+            return;
+        }
+        User user = userRepository.findByClerkId(clerkId).orElse(null);
+        if (user == null) {
+            return;
+        }
+        String userId = user.getId().toString();
+        List<MatchEntity> matches = matchRepository.findByPlayer1IdOrPlayer2Id(userId, userId);
+        for (MatchEntity match : matches) {
+            if (match.getStatus() != MatchStatus.ACTIVE) {
+                continue;
+            }
+            deleteDisconnectState(match.getId().toString(), userId);
+        }
     }
 
     @Scheduled(fixedDelay = 5_000)
@@ -127,26 +174,17 @@ public class MatchmakingService {
         if (!schedulingEnabled) {
             return;
         }
-        Set<ZSetOperations.TypedTuple<String>> members = redisTemplate.opsForZSet().rangeWithScores(QUEUE_KEY, 0, -1);
-        if (members == null || members.isEmpty()) {
-            return;
-        }
-
         long now = System.currentTimeMillis();
-        for (ZSetOperations.TypedTuple<String> member : members) {
-            String userId = member.getValue();
-            if (userId == null || userId.isBlank()) {
-                continue;
+        List<String> expired = new ArrayList<>();
+        meta.forEach((userId, entry) -> {
+            if (entry.timeoutAt() > 0L && now >= entry.timeoutAt()) {
+                expired.add(userId);
             }
-
-            Map<Object, Object> meta = redisTemplate.opsForHash().entries(META_PREFIX + userId);
-            long timeoutAt = parseLong(meta.get("timeoutAt"), 0L);
-            long joinedAt = parseLong(meta.get("joinedAt"), now);
-            if (timeoutAt > 0L && now >= timeoutAt || now - joinedAt >= QUEUE_TIMEOUT_MS) {
-                leaveQueue(userId);
-                messagingTemplate.convertAndSendToUser(userId, "/queue/queue-status",
-                        Map.of("status", "TIMEOUT", "reason", "NO_OPPONENT_FOUND"));
-            }
+        });
+        for (String userId : expired) {
+            leaveQueue(userId);
+            messagingTemplate.convertAndSendToUser(userId, "/queue/queue-status",
+                    Map.of("status", "TIMEOUT", "reason", "NO_OPPONENT_FOUND"));
         }
     }
 
@@ -157,45 +195,39 @@ public class MatchmakingService {
         if (!schedulingEnabled) {
             return;
         }
-        Set<ZSetOperations.TypedTuple<String>> members = redisTemplate.opsForZSet().rangeWithScores(QUEUE_KEY, 0, -1);
-        if (members == null || members.size() < 2) {
+        if (queue.size() < 2) {
             return;
         }
 
-        List<ZSetOperations.TypedTuple<String>> orderedMembers = new ArrayList<>(members);
-        orderedMembers.sort(Comparator.comparingDouble(tuple -> tuple.getScore() == null ? Double.MAX_VALUE
-                : tuple.getScore()));
+        List<Map.Entry<String, Double>> orderedMembers = new ArrayList<>(queue.entrySet());
+        orderedMembers.sort(Comparator.comparingDouble(Map.Entry::getValue));
 
         Set<String> matched = new HashSet<>();
-        for (ZSetOperations.TypedTuple<String> member : orderedMembers) {
-            String userId = member.getValue();
-            Double score = member.getScore();
+        long now = System.currentTimeMillis();
+        for (Map.Entry<String, Double> member : orderedMembers) {
+            String userId = member.getKey();
+            Double score = member.getValue();
             if (userId == null || score == null || matched.contains(userId)) {
                 continue;
             }
-
-            Map<Object, Object> meta = redisTemplate.opsForHash().entries(META_PREFIX + userId);
-            if (meta == null || meta.isEmpty()) {
+            QueueEntry entry = meta.get(userId);
+            if (entry == null) {
                 continue;
             }
 
-            long joinedAt = parseLong(meta.get("joinedAt"), System.currentTimeMillis());
-            int eloWindow = parseInt(meta.get("eloWindow"), DEFAULT_ELO_WINDOW);
-            if (System.currentTimeMillis() - joinedAt > WAIT_THRESHOLD_MS) {
+            int eloWindow = entry.eloWindow();
+            if (now - entry.joinedAt() > WAIT_THRESHOLD_MS) {
                 eloWindow += WINDOW_GROWTH;
-                redisTemplate.opsForHash().put(META_PREFIX + userId, "eloWindow", String.valueOf(eloWindow));
+                meta.put(userId, new QueueEntry(entry.sessionId(), entry.joinedAt(), entry.timeoutAt(), eloWindow));
             }
 
-            ZSetOperations.TypedTuple<String> opponent = findNearestOpponent(userId, score, eloWindow, matched);
-            if (opponent == null || opponent.getValue() == null || opponent.getScore() == null) {
+            Map.Entry<String, Double> opponent = findNearestOpponent(userId, score, eloWindow, matched);
+            if (opponent == null) {
                 continue;
             }
-
-            String opponentId = opponent.getValue();
             matched.add(userId);
-            matched.add(opponentId);
-
-            createMatch(userId, (int) Math.round(score), opponentId, (int) Math.round(opponent.getScore()));
+            matched.add(opponent.getKey());
+            createMatch(userId, (int) Math.round(score), opponent.getKey(), (int) Math.round(opponent.getValue()));
         }
     }
 
@@ -237,27 +269,16 @@ public class MatchmakingService {
 
         matchStateService.initMatchState(match.getId().toString(), player1.getId().toString(),
                 player2.getId().toString(), p1Elo, p2Elo);
-        redisTemplate.opsForHash().putAll("match:sessions:" + match.getId(), Map.of(
-                "p1SessionId", p1SessionId,
-                "p2SessionId", p2SessionId));
-        redisTemplate.expire("match:sessions:" + match.getId(), java.time.Duration.ofHours(2));
 
-        Long removedP1 = redisTemplate.opsForZSet().remove(QUEUE_KEY, p1Id);
-        Long removedP2 = redisTemplate.opsForZSet().remove(QUEUE_KEY, p2Id);
-        redisTemplate.delete(META_PREFIX + p1Id);
-        redisTemplate.delete(META_PREFIX + p2Id);
-        long decremented = (removedP1 != null && removedP1 > 0 ? 1 : 0) + (removedP2 != null && removedP2 > 0 ? 1 : 0);
-        if (decremented > 0) {
-            redisTemplate.opsForValue().increment(ONLINE_KEY, -decremented);
-        }
+        matchSessions.put(match.getId().toString(), new MatchSessions(p1SessionId, p2SessionId));
+        queue.remove(p1Id);
+        queue.remove(p2Id);
+        meta.remove(p1Id);
+        meta.remove(p2Id);
 
         ProblemDto problemDto = problemMapper.toDto(problem);
         UserProfileDto p1Profile = userMapper.toDto(player1);
         UserProfileDto p2Profile = userMapper.toDto(player2);
-        MatchFoundPayload p1Payload = new MatchFoundPayload(match.getId().toString(), p2Profile.username(),
-                problem.getTitle());
-        MatchFoundPayload p2Payload = new MatchFoundPayload(match.getId().toString(), p1Profile.username(),
-                problem.getTitle());
 
         messagingTemplate.convertAndSendToUser(p1Id, "/queue/match-found",
                 new MatchFoundEvent(match.getId().toString(), problemDto, p2Profile));
@@ -286,54 +307,59 @@ public class MatchmakingService {
         return match;
     }
 
-    public void handleDisconnect(String sessionId) {
-        if (sessionId == null || sessionId.isBlank()) {
-            return;
-        }
-
-        String lookupKey = SESSION_PREFIX + sessionId;
-        String resolvedUserId = redisTemplate.opsForValue().get(lookupKey);
-
-        redisTemplate.delete(lookupKey);
-
-        Set<String> keys = redisTemplate.keys(META_PREFIX + "*");
-        if (keys == null || keys.isEmpty()) {
-            return;
-        }
-
-        for (String key : keys) {
-            Map<Object, Object> meta = redisTemplate.opsForHash().entries(key);
-            Object storedSessionId = meta.get("sessionId");
-            if (!Objects.equals(sessionId, storedSessionId == null ? null : storedSessionId.toString())) {
-                continue;
-            }
-
-            String userId = key.substring(META_PREFIX.length());
-            leaveQueue(userId);
-            return;
-        }
-
-        handleActiveDisconnect(sessionId);
+    private User getUser(String userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
     }
 
-    public void handleReconnect(String clerkId) {
-        if (clerkId == null || clerkId.isBlank()) {
-            return;
-        }
+    private Map.Entry<String, Double> findNearestOpponent(String userId, double elo, int eloWindow,
+            Set<String> matched) {
+        double lo = elo - eloWindow;
+        double hi = elo + eloWindow;
+        return queue.entrySet().stream()
+                .filter(e -> e.getKey() != null && e.getValue() != null)
+                .filter(e -> !userId.equals(e.getKey()))
+                .filter(e -> !matched.contains(e.getKey()))
+                .filter(e -> e.getValue() >= lo && e.getValue() <= hi)
+                .min(Comparator.comparingDouble(e -> Math.abs(e.getValue() - elo)))
+                .orElse(null);
+    }
 
-        User user = userRepository.findByClerkId(clerkId).orElse(null);
-        if (user == null) {
-            return;
-        }
-
-        String userId = user.getId().toString();
-        List<MatchEntity> matches = matchRepository.findByPlayer1IdOrPlayer2Id(userId, userId);
-        for (MatchEntity match : matches) {
-            if (match.getStatus() != MatchStatus.ACTIVE) {
+    private void handleActiveDisconnect(String sessionId) {
+        for (Map.Entry<String, MatchSessions> entry : matchSessions.entrySet()) {
+            MatchSessions sessions = entry.getValue();
+            if (!Objects.equals(sessionId, sessions.p1SessionId())
+                    && !Objects.equals(sessionId, sessions.p2SessionId())) {
                 continue;
             }
+            String matchId = entry.getKey();
+            MatchEntity match = matchRepository.findById(matchId).orElse(null);
+            if (match == null || match.getStatus() != MatchStatus.ACTIVE) {
+                matchSessions.remove(matchId);
+                return;
+            }
+            boolean isP1 = Objects.equals(sessionId, sessions.p1SessionId());
+            String userId = isP1
+                    ? match.getPlayer1().getId().toString()
+                    : match.getPlayer2().getId().toString();
+            String opponentId = isP1
+                    ? match.getPlayer2().getId().toString()
+                    : match.getPlayer1().getId().toString();
+            String opponentSessionId = isP1 ? sessions.p2SessionId() : sessions.p1SessionId();
+            String opponentUserId = readSessionOwner(opponentSessionId);
 
-            deleteDisconnectState(match.getId().toString(), userId);
+            String opponentKey = disconnectKey(matchId, opponentId);
+            if (disconnectExpiry.containsKey(opponentKey)) {
+                voidMatch(matchId);
+                deleteDisconnectState(matchId, userId);
+                deleteDisconnectState(matchId, opponentId);
+            } else {
+                long expiresAt = System.currentTimeMillis() + DISCONNECT_GRACE_MS;
+                disconnectExpiry.put(disconnectKey(matchId, userId), expiresAt);
+                messagingTemplate.convertAndSendToUser(opponentUserId, "/queue/match-state",
+                        Map.of("type", "OPPONENT_DISCONNECTED", "reconnectWindowSeconds", 60));
+            }
+            return;
         }
     }
 
@@ -345,107 +371,34 @@ public class MatchmakingService {
             return;
         }
         long now = System.currentTimeMillis();
-        Set<String> dueKeys = redisTemplate.opsForZSet().rangeByScore(DISCONNECT_INDEX_KEY, 0, now);
-        if (dueKeys == null || dueKeys.isEmpty()) {
-            return;
-        }
-
-        for (String disconnectKey : dueKeys) {
-            if (disconnectKey == null || disconnectKey.isBlank()) {
-                continue;
+        List<String> dueKeys = new ArrayList<>();
+        disconnectExpiry.forEach((key, expiresAt) -> {
+            if (expiresAt <= now) {
+                dueKeys.add(key);
             }
-
-            DisconnectState state = parseDisconnectKey(disconnectKey);
+        });
+        for (String key : dueKeys) {
+            DisconnectState state = parseDisconnectKey(key);
             if (state == null) {
-                redisTemplate.opsForZSet().remove(DISCONNECT_INDEX_KEY, disconnectKey);
+                disconnectExpiry.remove(key);
                 continue;
             }
-
             MatchEntity match = matchRepository.findById(state.matchId()).orElse(null);
             if (match == null || match.getStatus() != MatchStatus.ACTIVE) {
                 deleteDisconnectState(state.matchId(), state.userId());
                 continue;
             }
-
             String opponentId = match.getPlayer1().getId().toString().equals(state.userId())
                     ? match.getPlayer2().getId().toString()
                     : match.getPlayer1().getId().toString();
-            if (Boolean.TRUE.equals(redisTemplate.hasKey(disconnectKey(state.matchId(), opponentId)))) {
+            if (disconnectExpiry.containsKey(disconnectKey(state.matchId(), opponentId))) {
                 voidMatch(state.matchId());
                 deleteDisconnectState(state.matchId(), state.userId());
                 deleteDisconnectState(state.matchId(), opponentId);
                 continue;
             }
-
             deleteDisconnectState(state.matchId(), state.userId());
             matchStateService.endMatch(state.matchId(), opponentId);
-        }
-    }
-
-    private ZSetOperations.TypedTuple<String> findNearestOpponent(String userId, double elo, int eloWindow,
-            Set<String> matched) {
-        Set<ZSetOperations.TypedTuple<String>> candidates = redisTemplate.opsForZSet()
-                .rangeByScoreWithScores(QUEUE_KEY, elo - eloWindow, elo + eloWindow);
-        if (candidates == null || candidates.isEmpty()) {
-            return null;
-        }
-
-        return candidates.stream()
-                .filter(candidate -> candidate.getValue() != null)
-                .filter(candidate -> candidate.getScore() != null)
-                .filter(candidate -> !userId.equals(candidate.getValue()))
-                .filter(candidate -> !matched.contains(candidate.getValue()))
-                .min(Comparator.comparingDouble(candidate -> Math.abs(candidate.getScore() - elo)))
-                .orElse(null);
-    }
-
-    private User getUser(String userId) {
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
-    }
-
-    private void handleActiveDisconnect(String sessionId) {
-        Set<String> keys = redisTemplate.keys("match:sessions:*");
-        if (keys == null || keys.isEmpty()) {
-            return;
-        }
-
-        for (String key : keys) {
-            Map<Object, Object> sessionMap = redisTemplate.opsForHash().entries(key);
-            String p1SessionId = value(sessionMap.get("p1SessionId"));
-            String p2SessionId = value(sessionMap.get("p2SessionId"));
-            if (!Objects.equals(sessionId, p1SessionId) && !Objects.equals(sessionId, p2SessionId)) {
-                continue;
-            }
-
-            String matchId = key.substring("match:sessions:".length());
-            MatchEntity match = matchRepository.findById(matchId).orElse(null);
-            if (match == null || match.getStatus() != MatchStatus.ACTIVE) {
-                return;
-            }
-
-            String userId = Objects.equals(sessionId, p1SessionId)
-                    ? match.getPlayer1().getId().toString()
-                    : match.getPlayer2().getId().toString();
-            String opponentId = Objects.equals(userId, match.getPlayer1().getId().toString())
-                    ? match.getPlayer2().getId().toString()
-                    : match.getPlayer1().getId().toString();
-            String opponentSessionId = Objects.equals(sessionId, p1SessionId) ? p2SessionId : p1SessionId;
-            String opponentUserId = readSessionOwner(opponentSessionId);
-
-            String disconnectKey = disconnectKey(matchId, userId);
-            if (Boolean.TRUE.equals(redisTemplate.hasKey(disconnectKey(matchId, opponentId)))) {
-                voidMatch(matchId);
-                deleteDisconnectState(matchId, userId);
-                deleteDisconnectState(matchId, opponentId);
-            } else {
-                redisTemplate.opsForValue().set(disconnectKey, "1", java.time.Duration.ofSeconds(60));
-                redisTemplate.opsForZSet().add(DISCONNECT_INDEX_KEY, disconnectKey, (double) (System.currentTimeMillis()
-                        + DISCONNECT_GRACE_MS));
-                messagingTemplate.convertAndSendToUser(opponentUserId, "/queue/match-state",
-                        Map.of("type", "OPPONENT_DISCONNECTED", "reconnectWindowSeconds", 60));
-            }
-            return;
         }
     }
 
@@ -453,32 +406,29 @@ public class MatchmakingService {
         UUID matchUuid = UUID.fromString(matchId);
         MatchEntity match = matchRepository.findById(matchUuid.toString()).orElse(null);
         if (match == null) {
+            matchSessions.remove(matchId);
             return;
         }
-
         match.setStatus(MatchStatus.VOID);
         match.setEndedAt(LocalDateTime.now());
         matchRepository.save(match);
+        matchSessions.remove(matchId);
         messagingTemplate.convertAndSend("/topic/match." + matchId, Map.of("type", "MATCH_VOID"));
     }
 
     private void deleteDisconnectState(String matchId, String userId) {
-        String key = disconnectKey(matchId, userId);
-        redisTemplate.delete(key);
-        redisTemplate.opsForZSet().remove(DISCONNECT_INDEX_KEY, key);
+        disconnectExpiry.remove(disconnectKey(matchId, userId));
     }
 
     private DisconnectState parseDisconnectKey(String disconnectKey) {
         if (!disconnectKey.startsWith(DISCONNECT_PREFIX)) {
             return null;
         }
-
         String remainder = disconnectKey.substring(DISCONNECT_PREFIX.length());
         int lastSeparator = remainder.lastIndexOf(':');
         if (lastSeparator <= 0 || lastSeparator == remainder.length() - 1) {
             return null;
         }
-
         return new DisconnectState(remainder.substring(0, lastSeparator), remainder.substring(lastSeparator + 1));
     }
 
@@ -486,42 +436,40 @@ public class MatchmakingService {
         return DISCONNECT_PREFIX + matchId + ":" + userId;
     }
 
-    private String value(Object value) {
-        return value == null ? null : value.toString();
+    private String readSessionId(String userId) {
+        QueueEntry entry = meta.get(userId);
+        if (entry == null || entry.sessionId() == null || entry.sessionId().isBlank()) {
+            return userId;
+        }
+        return entry.sessionId();
+    }
+
+    private String readSessionOwner(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return sessionId;
+        }
+        String owner = sessionOwners.get(sessionId);
+        return owner == null ? sessionId : owner;
+    }
+
+    private record QueueEntry(String sessionId, long joinedAt, long timeoutAt, int eloWindow) {
+    }
+
+    private record MatchSessions(String p1SessionId, String p2SessionId) {
     }
 
     private record DisconnectState(String matchId, String userId) {
     }
 
-    private String readSessionId(String userId) {
-        Object sessionId = redisTemplate.opsForHash().get(META_PREFIX + userId, "sessionId");
-        return sessionId == null ? userId : sessionId.toString();
-    }
+    public static class MatchFoundEvent {
+        public String matchId;
+        public ProblemDto problem;
+        public UserProfileDto opponent;
 
-    private String readSessionOwner(String sessionId) {
-        Object owner = redisTemplate.opsForValue().get(SESSION_PREFIX + sessionId);
-        return owner == null ? sessionId : owner.toString();
-    }
-
-    private int parseInt(Object value, int defaultValue) {
-        if (value == null) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value.toString());
-        } catch (NumberFormatException exception) {
-            return defaultValue;
-        }
-    }
-
-    private long parseLong(Object value, long defaultValue) {
-        if (value == null) {
-            return defaultValue;
-        }
-        try {
-            return Long.parseLong(value.toString());
-        } catch (NumberFormatException exception) {
-            return defaultValue;
+        public MatchFoundEvent(String matchId, ProblemDto problem, UserProfileDto opponent) {
+            this.matchId = matchId;
+            this.problem = problem;
+            this.opponent = opponent;
         }
     }
 }

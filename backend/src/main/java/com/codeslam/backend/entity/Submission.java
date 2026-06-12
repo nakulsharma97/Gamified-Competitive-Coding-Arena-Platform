@@ -92,7 +92,7 @@ public class Submission {
         }
     }
 
-    public UUID getId() {
+    public String getId() {
         return id == null ? null : UUID.fromString(id);
     }
 

@@ -9,8 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@clerk/nextjs": "^7.4.0",
-    "@monaco-editor/react": "^4.7.0",
+        "@monaco-editor/react": "^4.7.0",
     "@stomp/stompjs": "^7.3.0",
     "@vercel/og": "^0.11.1",
     "class-variance-authority": "^0.7.1",
@@ -18,7 +17,7 @@
     "date-fns": "^4.2.1",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.16.0",
-    "next": "16.2.6",
+    "next": "^15.3.5",
     "posthog-js": "^1.376.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",

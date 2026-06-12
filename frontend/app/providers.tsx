@@ -1,6 +1,5 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useEffect } from "react";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
@@ -9,7 +8,9 @@ import { toast } from "@/hooks/use-toast";
 import { connect, subscribe } from "@/lib/stomp";
 
 export function AppProviders({ children }: Readonly<{ children: React.ReactNode }>) {
-  const { getToken, isLoaded, userId } = useAuth();
+  const getToken = async () => localStorage.getItem("token");
+  const isLoaded = true;
+  const userId = localStorage.getItem("userId");
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 
