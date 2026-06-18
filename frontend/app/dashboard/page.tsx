@@ -69,7 +69,7 @@ async function loadDashboardData() {
   const resolvedToken = token ?? (await getServerToken());
 
   // Use individual try-catch or catch blocks to ensure one failing API doesn't break the whole dashboard
-  const headers = { token: resolvedToken ?? undefined };
+  const headers = resolvedToken ? { token: resolvedToken } : {};
 
   const [meResponse, globalStats, history, leaderboard, eloHistory] = await Promise.all([
     apiJson<UserMe>("/api/users/me", headers).catch((err) => {
@@ -143,7 +143,7 @@ export default async function DashboardPage() {
         createdAt: match.createdAt,
       }))}
       leaderboard={leaderboard?.players || []}
-      globalStats={globalStats!}
+      globalStats={globalStats}
       eloHistory={eloHistory || []}
     />
   );
