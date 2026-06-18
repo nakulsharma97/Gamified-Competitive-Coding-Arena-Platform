@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
 import { Toaster } from "@/components/ui/toaster";
 import { toast } from "@/hooks/use-toast";
 import { connect, subscribe } from "@/lib/stomp";
-import { ClerkProvider } from "@clerk/nextjs";
+
 
 export function AppProviders({ children }: Readonly<{ children: React.ReactNode }>) {
-  const getToken = async () => {
+const getToken = useCallback(async () => {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("token");
-};
+}, []);
 
 const isLoaded = true;
 
@@ -97,7 +97,6 @@ const userId =
   const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   return (
-<<<<<<< HEAD
   <ClerkProvider>
     <PostHogProvider client={posthog}>
       {children}
@@ -105,13 +104,4 @@ const userId =
     </PostHogProvider>
   </ClerkProvider>
 );
-=======
-    <ClerkProvider publishableKey={clerkPublishableKey}>
-      <PostHogProvider client={posthog}>
-        {children}
-        <Toaster />
-      </PostHogProvider>
-    </ClerkProvider>
-  );
->>>>>>> 69d97fb (Dess)
 }

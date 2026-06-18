@@ -92,13 +92,8 @@ public class Submission {
         }
     }
 
-<<<<<<< HEAD
     public String getId() {
         return id ;
-=======
-    public UUID getId() {
-        return id == null ? null : UUID.fromString(id);
->>>>>>> 69d97fb (Dess)
     }
 
     public void setId(String id) {

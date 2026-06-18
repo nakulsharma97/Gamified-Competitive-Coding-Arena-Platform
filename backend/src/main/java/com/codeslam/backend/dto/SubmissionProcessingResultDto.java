@@ -19,7 +19,6 @@ public record SubmissionProcessingResultDto(
         Map<String, Integer> damageBreakdown,
         List<SubmissionDto> submissions) {
 
-<<<<<<< HEAD
     public SubmissionProcessingResultDto(
             String id,
             UUID matchId,
@@ -48,6 +47,4 @@ public record SubmissionProcessingResultDto(
                 damageBreakdown,
                 submissions);
     }
-=======
->>>>>>> 69d97fb (Dess)
 }

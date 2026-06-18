@@ -23,19 +23,8 @@ async function getBearerToken() {
     : process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
 
   if (typeof window === "undefined") {
-<<<<<<< HEAD
   return null;
 }
-=======
-    try {
-      const { auth } = await import("@clerk/nextjs/server");
-      const clerkAuth = await auth();
-      return await clerkAuth.getToken(clerkJwtTemplate ? { template: clerkJwtTemplate } : undefined);
-    } catch {
-      return null;
-    }
-  }
->>>>>>> 69d97fb (Dess)
 
   const clerk = (window as any).Clerk;
   try {
@@ -48,7 +37,11 @@ async function getBearerToken() {
 export async function apiFetch(path: string, options: ApiOptions = {}) {
   // Use NEXT_PUBLIC_API_URL when set (production / explicit local config).
   // Fall back to a relative URL so Next.js rewrites() can proxy /api/* in dev.
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "";
+  const isServer = typeof window === "undefined";
+
+const baseUrl = isServer
+  ? process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"
+  : process.env.NEXT_PUBLIC_API_URL || "";
 
   const { token, json, ...requestOptions } = options;
   const resolvedToken = token ?? (await getBearerToken());
@@ -74,27 +67,30 @@ export async function apiFetch(path: string, options: ApiOptions = {}) {
     headers,
   });
 
-  if (!response.ok) {
-    let data: unknown = null;
+ if (!response.ok) {
+  console.log("API ERROR");
+  console.log("URL:", `${baseUrl}${path}`);
+  console.log("STATUS:", response.status);
 
+  let data: unknown = null;
+
+  try {
+    data = await response.clone().json();
+  } catch {
     try {
-      data = await response.clone().json();
+      data = await response.text();
     } catch {
-      try {
-        data = await response.text();
-      } catch {
-        data = null;
-      }
+      data = null;
     }
-
-    throw new ApiError(
-      response.statusText || "Request failed",
-      response.status,
-      data
-    );
   }
 
-  return response;
+  console.log("RESPONSE:", data);
+
+ throw new Error(
+  `STATUS=${response.status} URL=${baseUrl}${path} RESPONSE=${JSON.stringify(data)}`
+);
+}
+return response; 
 }
 
 export async function apiJson<T>(path: string, options: ApiJsonOptions = {}) {
@@ -103,20 +99,5 @@ export async function apiJson<T>(path: string, options: ApiJsonOptions = {}) {
 }
 
 export async function getServerToken() {
-<<<<<<< HEAD
   return null;
-=======
-  if (typeof window !== "undefined") {
-    return null;
-  }
-
-  try {
-    const { auth } = await import("@clerk/nextjs/server");
-    const session = await auth();
-    const clerkJwtTemplate = process.env.CLERK_JWT_TEMPLATE;
-    return await session.getToken(clerkJwtTemplate ? { template: clerkJwtTemplate } : undefined);
-  } catch {
-    return null;
-  }
->>>>>>> 69d97fb (Dess)
 }

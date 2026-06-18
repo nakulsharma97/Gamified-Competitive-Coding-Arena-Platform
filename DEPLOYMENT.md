@@ -17,8 +17,7 @@ No Docker required. Backend → Railway. Frontend → Vercel.
 2. Select your repo, set the root directory to: backend/
 3. Railway detects the Dockerfile automatically and builds the Spring Boot jar
 4. Click "Add Plugin" → MySQL → Railway sets SPRING*DATASOURCE*\* env vars automatically
-5. Click "Add Plugin" → Redis → Railway sets SPRING_DATA_REDIS_URL automatically
-6. Go to the backend service → Variables tab → add these manually:
+5. Go to the backend service → Variables tab → add these manually (Ensure no REDIS vars remain):
    - CLERK_JWKS_URL = (copy from Clerk dashboard → your app → API Keys → JWKS endpoint)
    - CLERK_WEBHOOK_SECRET = (copy from Clerk webhook settings — set this up in Step 3)
    - JUDGE0_URL = https://ce.judge0.com
@@ -26,8 +25,8 @@ No Docker required. Backend → Railway. Frontend → Vercel.
    - FRONTEND_URL = https://your-app.vercel.app (update after Step 2)
    - AUTH_JWT_SECRET_BASE64 = (generate: openssl rand -base64 64)
    - ANTHROPIC_API_KEY = (optional — for AI coach feature)
-7. Railway triggers a deploy. Wait for it to go green.
-8. Copy your Railway backend URL: https://your-backend.up.railway.app
+6. Railway triggers a deploy. Wait for it to go green.
+7. Copy your Railway backend URL: https://your-backend.up.railway.app
 
 ## Step 2 — Deploy the frontend to Vercel
 
@@ -87,18 +86,13 @@ No additional secrets needed for the frontend.
    Windows: install MySQL Community Server from mysql.com
    Then: mysql -u root -e "CREATE DATABASE codeslam;"
 
-2. Start Redis locally:
-   macOS: brew install redis && brew services start redis
-   Ubuntu: sudo apt install redis-server && sudo systemctl start redis
-   Windows: use WSL or Memurai (redis for windows)
-
-3. Start the backend:
+2. Start the backend (Redis is no longer required):
    cd backend
    cp ../DEPLOYMENT.md . # just for reference
    Create src/main/resources/application-local.yml with your local values if needed
    mvn spring-boot:run
 
-4. Start the frontend:
+3. Start the frontend:
    cd frontend
    cp .env.local.example .env.local
 
@@ -107,7 +101,7 @@ No additional secrets needed for the frontend.
    pnpm install
    pnpm dev
 
-5. The Vite proxy in next.config.ts forwards /api/\* and /ws to localhost:8080 in dev mode.
+4. The Vite proxy in next.config.ts forwards /api/\* and /ws to localhost:8080 in dev mode.
 
 ## Environment variables reference
 
@@ -118,7 +112,6 @@ No additional secrets needed for the frontend.
 | SPRING_DATASOURCE_URL      | ✅ auto   | Set by Railway MySQL plugin                                             |
 | SPRING_DATASOURCE_USERNAME | ✅ auto   | Set by Railway MySQL plugin                                             |
 | SPRING_DATASOURCE_PASSWORD | ✅ auto   | Set by Railway MySQL plugin                                             |
-| SPRING_DATA_REDIS_URL      | ✅ auto   | Set by Railway Redis plugin                                             |
 | CLERK_JWKS_URL             | ✅ manual | From Clerk dashboard                                                    |
 | CLERK_WEBHOOK_SECRET       | ✅ manual | From Clerk webhook settings                                             |
 | FRONTEND_URL               | ✅ manual | Your Vercel app URL                                                     |
