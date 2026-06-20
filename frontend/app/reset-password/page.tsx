@@ -6,13 +6,20 @@ export const metadata: Metadata = {
   description: "Request a reset link or set a new CodeSlam password.",
 };
 
-export default function ResetPasswordPage({
-  searchParams,
-}: Readonly<{
-  searchParams?: {
+type PageProps = {
+  searchParams: Promise<{
     token?: string | string[];
-  };
-}>) {
-  const token = Array.isArray(searchParams?.token) ? searchParams?.token[0] : searchParams?.token ?? "";
+  }>;
+};
+
+export default async function ResetPasswordPage({
+  searchParams,
+}: PageProps) {
+  const params = await searchParams;
+
+  const token = Array.isArray(params?.token)
+    ? params.token[0]
+    : params?.token ?? "";
+
   return <ResetPasswordClient initialToken={token} />;
 }
