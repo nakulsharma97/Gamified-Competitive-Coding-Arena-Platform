@@ -53,9 +53,11 @@ export function OnboardingWizard() {
 
   useEffect(() => {
     if (!username.trim()) {
-      setUsernameState("idle");
-      return;
-    }
+  queueMicrotask(() => {
+    setUsernameState("idle");
+  });
+  return;
+}
 
     const timer = window.setTimeout(async () => {
       setUsernameState("checking");
@@ -74,12 +76,15 @@ export function OnboardingWizard() {
   }, [username]);
 
   useEffect(() => {
-    if (selectedLanguages.length > 0 && !selectedLanguages.includes(practiceLanguage)) {
-      const nextLanguage = selectedLanguages[0];
+  if (selectedLanguages.length > 0 && !selectedLanguages.includes(practiceLanguage)) {
+    const nextLanguage = selectedLanguages[0];
+
+    queueMicrotask(() => {
       setPracticeLanguage(nextLanguage);
       setPracticeCode(starterCode[nextLanguage] ?? starterCode.Python);
-    }
-  }, [practiceLanguage, selectedLanguages]);
+    });
+  }
+}, [practiceLanguage, selectedLanguages]);
 
   useEffect(() => {
     if (step !== 4 || practiceProblem || practiceLoading) {

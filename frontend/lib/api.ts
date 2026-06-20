@@ -26,12 +26,27 @@ async function getBearerToken() {
   return null;
 }
 
-  const clerk = (window as any).Clerk;
-  try {
-    return await clerk?.session?.getToken?.(clerkJwtTemplate ? { template: clerkJwtTemplate } : undefined) ?? null;
-  } catch {
+type ClerkLike = {
+  session?: {
+    getToken?: (options?: { template?: string }) => Promise<string | null>;
+  };
+};
+
+const clerk = (window as Window & { Clerk?: ClerkLike }).Clerk;
+
+try {
+  if (!clerk?.session?.getToken) {
     return null;
   }
+
+  return await clerk.session.getToken(
+    clerkJwtTemplate
+      ? { template: clerkJwtTemplate }
+      : undefined
+  );
+} catch {
+  return null;
+}
 }
 
 export async function apiFetch(path: string, options: ApiOptions = {}) {
@@ -101,3 +116,4 @@ export async function apiJson<T>(path: string, options: ApiJsonOptions = {}) {
 export async function getServerToken() {
   return null;
 }
+

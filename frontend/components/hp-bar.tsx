@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+
 
 type HpBarProps = {
   hp: number;
@@ -15,14 +16,23 @@ export function HpBar({ hp, maxHp = 100, label, className }: HpBarProps) {
   const previousHp = usePrevious(hp);
 
   useEffect(() => {
-    if (previousHp !== undefined && hp < previousHp) {
+  if (previousHp !== undefined && hp < previousHp) {
+    const startFlash = window.setTimeout(() => {
       setFlash(true);
-      const timeout = window.setTimeout(() => setFlash(false), 450);
-      return () => window.clearTimeout(timeout);
-    }
+    }, 0);
 
-    return undefined;
-  }, [hp, previousHp]);
+    const stopFlash = window.setTimeout(() => {
+      setFlash(false);
+    }, 450);
+
+    return () => {
+      window.clearTimeout(startFlash);
+      window.clearTimeout(stopFlash);
+    };
+  }
+
+  return undefined;
+}, [hp, previousHp]);
 
   const percent = Math.max(0, Math.min(100, (hp / maxHp) * 100));
 
@@ -52,11 +62,11 @@ export function HpBar({ hp, maxHp = 100, label, className }: HpBarProps) {
 }
 
 function usePrevious<T>(value: T) {
-  const [previous, setPrevious] = useState<T | undefined>(undefined);
+  const ref = useRef<T | undefined>(undefined);
 
   useEffect(() => {
-    setPrevious(value);
+    ref.current = value;
   }, [value]);
 
-  return previous;
+  return ref.current;
 }
