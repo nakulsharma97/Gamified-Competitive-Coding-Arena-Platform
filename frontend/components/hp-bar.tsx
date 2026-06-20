@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-
 
 type HpBarProps = {
   hp: number;
@@ -12,28 +11,6 @@ type HpBarProps = {
 };
 
 export function HpBar({ hp, maxHp = 100, label, className }: HpBarProps) {
-  const [flash, setFlash] = useState(false);
-  const previousHp = usePrevious(hp);
-
-  useEffect(() => {
-  if (previousHp !== undefined && hp < previousHp) {
-    const startFlash = window.setTimeout(() => {
-      setFlash(true);
-    }, 0);
-
-    const stopFlash = window.setTimeout(() => {
-      setFlash(false);
-    }, 450);
-
-    return () => {
-      window.clearTimeout(startFlash);
-      window.clearTimeout(stopFlash);
-    };
-  }
-
-  return undefined;
-}, [hp, previousHp]);
-
   const percent = Math.max(0, Math.min(100, (hp / maxHp) * 100));
 
   const fillClass = useMemo(() => {
@@ -51,22 +28,15 @@ export function HpBar({ hp, maxHp = 100, label, className }: HpBarProps) {
         </div>
       ) : null}
 
-      <div className={cn("h-3 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10", flash && "animate-damagePulse")}>
+      <div className="h-3 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/10">
         <div
-          className={cn("h-full rounded-full transition-all duration-500 ease-out", fillClass)}
+          className={cn(
+            "h-full rounded-full transition-all duration-500 ease-out",
+            fillClass
+          )}
           style={{ width: `${percent}%` }}
         />
       </div>
     </div>
   );
-}
-
-function usePrevious<T>(value: T) {
-  const ref = useRef<T | undefined>(undefined);
-
-  useEffect(() => {
-    ref.current = value;
-  }, [value]);
-
-  return ref.current;
 }
