@@ -479,7 +479,22 @@ export default function ArenaPage() {
         });
         break;
     }
-  }, [addChat, addMatchEvent, addToast, applyPowerUpEffect, endMatch, matchId, nextLocalId, router, setTimer, updateHp]);
+  }, [
+  addChat,
+  addMatchEvent,
+  addToast,
+  applyPowerUpEffect,
+  endMatch,
+  matchId,
+  nextLocalId,
+  router,
+  setTimer,
+  updateHp,
+  match.p1.id,
+  match.p1.username,
+  match.p2.id,
+  match.p2.username
+]);
 
   useEffect(() => {
     reverseKeyboardRef.current = reverseKeyboard;

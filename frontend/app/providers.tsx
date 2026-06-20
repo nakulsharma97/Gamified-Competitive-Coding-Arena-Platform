@@ -94,7 +94,6 @@ const userId =
     };
   }, [getToken, isLoaded, userId]);
 
-  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
   return (
   <ClerkProvider>

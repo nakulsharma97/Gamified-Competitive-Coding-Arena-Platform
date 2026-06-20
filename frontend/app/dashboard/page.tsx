@@ -1,7 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { apiJson, getServerToken } from "@/lib/api";
 import { DashboardShowcase } from "@/components/dashboard-showcase";
-import { redirect } from "next/navigation";
 
 // Production revalidation: Refresh data every 60 seconds
 export const revalidate = 60;
