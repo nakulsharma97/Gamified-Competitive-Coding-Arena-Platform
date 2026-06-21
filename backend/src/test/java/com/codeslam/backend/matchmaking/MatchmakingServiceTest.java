@@ -91,7 +91,8 @@ class MatchmakingServiceTest {
                 String player2SessionId = "session-p2";
 
                 MatchEntity match = createActiveMatch(matchId, player1Id, player2Id);
-                when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+                when(matchRepository.findById(matchId.toString()))
+                                .thenReturn(Optional.of(match));
 
                 seedSession(player1SessionId, player1Id.toString());
                 seedSession(player2SessionId, player2Id.toString());
@@ -99,13 +100,20 @@ class MatchmakingServiceTest {
 
                 matchmakingService.handleDisconnect(player1SessionId);
 
-                ConcurrentMap<String, Long> expiry = (ConcurrentMap<String, Long>) ReflectionTestUtils
-                                .getField(matchmakingService, "disconnectExpiry");
+                ConcurrentMap<String, Long> expiry = (ConcurrentMap<String, Long>) ReflectionTestUtils.getField(
+                                matchmakingService,
+                                "disconnectExpiry");
+
+              
                 assertTrue(expiry.containsKey("disconnect:" + matchId + ":" + player1Id));
                 assertFalse(expiry.containsKey("disconnect:" + matchId + ":" + player2Id));
 
-                verify(messagingTemplate).convertAndSendToUser(eq(player2SessionId), eq("/queue/match-state"),
-                                eq(Map.of("type", "OPPONENT_DISCONNECTED", "reconnectWindowSeconds", 60)));
+                verify(messagingTemplate).convertAndSendToUser(
+                                eq(player2Id.toString()),
+                                eq("/queue/match-state"),
+                                eq(Map.of(
+                                                "type", "OPPONENT_DISCONNECTED",
+                                                "reconnectWindowSeconds", 60)));
 
                 // Force the grace key to look expired, then run the timeout sweeper.
                 expiry.put("disconnect:" + matchId + ":" + player1Id, 0L);
@@ -125,14 +133,21 @@ class MatchmakingServiceTest {
                 String player2SessionId = "session-p2";
 
                 MatchEntity match = createActiveMatch(matchId, player1Id, player2Id);
-                when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+                when(matchRepository.findById(matchId.toString()))
+                                .thenReturn(Optional.of(match));
 
                 seedSession(player1SessionId, player1Id.toString());
                 seedSession(player2SessionId, player2Id.toString());
                 seedMatchSessions(matchId, player1SessionId, player2SessionId);
 
                 matchmakingService.handleDisconnect(player1SessionId);
+                ConcurrentMap<String, Long> expiry = (ConcurrentMap<String, Long>) ReflectionTestUtils.getField(
+                                matchmakingService,
+                                "disconnectExpiry");
+
+                
                 matchmakingService.handleDisconnect(player2SessionId);
+                
 
                 assertEquals(MatchStatus.VOID, match.getStatus());
                 assertNotNull(match.getEndedAt());

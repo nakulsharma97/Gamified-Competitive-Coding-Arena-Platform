@@ -1,4 +1,5 @@
 package com.codeslam.backend.matchmaking;
+
 import com.codeslam.backend.match.MatchStateService;
 import com.codeslam.backend.dto.ProblemDto;
 import com.codeslam.backend.dto.UserProfileDto;
@@ -38,7 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Matchmaking service. Previously backed by Redis ZSETs, hashes, and key-space
  * notifications. Replaced with in-memory data structures for a single-instance
- * deployment. For multi-instance HA, swap the {@link ConcurrentMap} fields for a
+ * deployment. For multi-instance HA, swap the {@link ConcurrentMap} fields for
+ * a
  * distributed cache or a database-backed implementation.
  */
 @Service
@@ -135,9 +137,14 @@ public class MatchmakingService {
         if (sessionId == null || sessionId.isBlank()) {
             return;
         }
+
+        
+
         String resolvedUserId = sessionOwners.remove(sessionId);
 
-        // Drop the user from the matchmaking queue if they were in it.
+        System.out.println("Resolved User = " + resolvedUserId);
+        System.out.println("After remove = " + sessionOwners);
+
         if (resolvedUserId != null) {
             QueueEntry entry = meta.get(resolvedUserId);
             if (entry != null && Objects.equals(sessionId, entry.sessionId())) {
@@ -145,7 +152,6 @@ public class MatchmakingService {
             }
         }
 
-        // Look up any active match tied to this session and start the grace timer.
         handleActiveDisconnect(sessionId);
     }
 
@@ -325,6 +331,7 @@ public class MatchmakingService {
     }
 
     private void handleActiveDisconnect(String sessionId) {
+       
         for (Map.Entry<String, MatchSessions> entry : matchSessions.entrySet()) {
             MatchSessions sessions = entry.getValue();
             if (!Objects.equals(sessionId, sessions.p1SessionId())
@@ -354,8 +361,16 @@ public class MatchmakingService {
                 deleteDisconnectState(matchId, opponentId);
             } else {
                 long expiresAt = System.currentTimeMillis() + DISCONNECT_GRACE_MS;
+
+                
+
                 disconnectExpiry.put(disconnectKey(matchId, userId), expiresAt);
-                messagingTemplate.convertAndSendToUser(opponentUserId, "/queue/match-state",
+
+                
+
+                messagingTemplate.convertAndSendToUser(
+                        opponentUserId,
+                        "/queue/match-state",
                         Map.of("type", "OPPONENT_DISCONNECTED", "reconnectWindowSeconds", 60));
             }
             return;

@@ -44,6 +44,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.client.RestClientException;
 import com.codeslam.backend.websocket.MatchWebSocketPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class SubmissionWorkerServiceTest {
@@ -82,12 +83,25 @@ class SubmissionWorkerServiceTest {
         private SubmissionWorkerService submissionWorkerService;
 
         @BeforeEach
-        void setUp() {
-                submissionWorkerService = new SubmissionWorkerService(submissionQueueRepository, submissionRepository,
-                                matchRepository,
-                                problemRepository, matchStateService, judgeService, damageService, matchEventRepository,
-                                messagingTemplate, objectMapper, matchWebSocketPublisher);
-        }
+void setUp() {
+    submissionWorkerService = new SubmissionWorkerService(
+            submissionQueueRepository,
+            submissionRepository,
+            matchRepository,
+            problemRepository,
+            matchStateService,
+            judgeService,
+            damageService,
+            matchEventRepository,
+            messagingTemplate,
+            objectMapper,
+            matchWebSocketPublisher);
+
+    ReflectionTestUtils.setField(
+            submissionWorkerService,
+            "schedulingEnabled",
+            true);
+}
 
         @Test
         void judgeTimeoutMarksSubmissionErrorAndSkipsDamageApplication() {

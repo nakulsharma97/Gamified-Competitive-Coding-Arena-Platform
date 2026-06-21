@@ -30,7 +30,7 @@ import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
@@ -44,7 +44,7 @@ class JudgeSecurityTest {
     @Autowired
     private JudgeService judgeService;
 
-    @MockBean
+    @MockitoBean
     private TestCaseRepository testCaseRepository;
 
     private UUID problemId;

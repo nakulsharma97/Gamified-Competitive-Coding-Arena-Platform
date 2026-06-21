@@ -8,6 +8,7 @@
   <description>CodeSlam backend scaffold</description>
   <properties>
     <java.version>21</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <spring-boot.version>3.4.2</spring-boot.version>
     <mapstruct.version>1.5.5.Final</mapstruct.version>
     <lombok.version>1.18.36</lombok.version>
@@ -160,13 +161,15 @@
         </configuration>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <version>3.2.5</version>
-        <configuration>
-          <argLine>-Dnet.bytebuddy.experimental=true</argLine>
-        </configuration>
-      </plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <version>3.2.5</version>
+    <configuration>
+        <argLine>
+            -XX:+EnableDynamicAgentLoading
+        </argLine>
+    </configuration>
+</plugin>
     </plugins>
   </build>
 </project>

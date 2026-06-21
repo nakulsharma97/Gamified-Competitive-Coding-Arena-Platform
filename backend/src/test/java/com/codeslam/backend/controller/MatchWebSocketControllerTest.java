@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,8 +69,7 @@ class MatchWebSocketControllerTest {
     @Mock
     private MatchWebSocketPublisher matchWebSocketPublisher;
 
-    @Mock
-    private RedisTemplate<String, String> redisTemplate;
+
 
     private MatchWebSocketController controller;
 
@@ -111,14 +109,13 @@ class MatchWebSocketControllerTest {
                 MatchStatus.COMPLETED,
                 true);
         when(matchStateService.getMatchState(matchId.toString())).thenReturn(endedState);
-        when(powerupLockRepository.findActiveLock(anyString(), anyString(), any())).thenReturn(Optional.empty());
 
         controller.handleSubmit(new SubmitCodeRequest(matchId.toString(), "class Main {}", "java"), principal);
 
         verify(messagingTemplate).convertAndSendToUser(eq(userId.toString()), eq("/queue/errors"),
                 eq(Map.of("type", "MATCH_ENDED")));
         verify(submissionRepository, never()).save(any());
-        // verify(redisTemplate, never()).opsForList();
+        
         verify(matchStateService, never()).isActiveParticipant(anyString(), anyString());
     }
 }
